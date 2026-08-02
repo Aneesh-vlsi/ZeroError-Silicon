@@ -43,12 +43,31 @@ download_sw_js = """
 }
 """
 
-def live_sync_buffer(val):
-    return val
-with gr.Blocks() as app:
-    gr.Markdown("# 🤖 ZeroError Silicon")
-    #  PASTE THIS CLEAN TIMED BLOCK INSTEAD (No negative cutting margins):
-    gr.Markdown("<p style='color: #475569 !important; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif !important; font-size: 15px !important; font-weight: 500 !important; margin: 4px 0 16px 0 !important; padding: 0 !important; line-height: 1.4 !important; letter-spacing: -0.01em !important;'>Next-Generation AI Tooling for Heterogeneous Microcontrollers</p>")
+# Client-side logout action script that safely clears HTTP Basic Authentication headers
+logout_session_js = """
+() => {
+    let currentURL = window.location.href;
+    let cleanURL = currentURL.replace(/^(https?:\\/\\/)(.*)/, '$1logout:logout@$2');
+    
+    // Fallback: Clear sessionStorage/localStorage structures if used by Gradio internally
+    try {
+        sessionStorage.clear();
+        localStorage.clear();
+    } catch(e) {}
+    
+    window.location.href = cleanURL;
+}
+"""
+
+with gr.Blocks(css=login_wall_css) as app:
+    with gr.Row(elem_id="header-bar-container", variant="compact"):
+        with gr.Column(scale=4):
+            gr.Markdown("# 🤖 ZeroError Silicon")
+            gr.Markdown("<p style='color: #475569 !important; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif !important; font-size: 15px !important; font-weight: 500 !important; margin: 4px 0 16px 0 !important; padding: 0 !important; line-height: 1.4 !important; letter-spacing: -0.01em !important;'>Next-Generation AI Tooling for Heterogeneous Microcontrollers</p>")
+        with gr.Column(scale=1, min_width=120):
+            # Native modern Log Out action button with an icon anchor within the header row
+            logout_btn = gr.Button("🚪 Log Out", variant="stop", size="sm")
+
     with gr.Row():
         bus_status_display = gr.Textbox(label="Hardware Bus Tracking Status", value="Status: Workspace Online. Ready to receive design rules.", interactive=False, scale=3)
         theme_selector = gr.Dropdown(
@@ -117,7 +136,7 @@ with gr.Blocks() as app:
                     sw_code_output = gr.HTML(label="2️⃣ Live Functional Application Workspace Preview")
                     gr.Markdown("---")
                     
-                    # 🔴 HIGH-VISIBILITY RED NOTICE CONTAINER EMBEDDED
+                    # HIGH-VISIBILITY RED NOTICE CONTAINER EMBEDDED
                     gr.HTML(value="""
                         <div style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px; padding: 12px 16px; margin: 10px 0 20px 0; display: flex; align-items: center; gap: 8px;">
                             <span style="color: #dc2626; font-size: 18px; font-weight: bold; line-height: 1;">⚠️</span>
@@ -131,52 +150,50 @@ with gr.Blocks() as app:
                     
                     with gr.Row():
                         sw_play_btn = gr.Button("🔊 Silicon talks", variant="secondary")
-                        sw_stop_btn = gr.Button("🛑 Stop Application Voice Explanation", variant="stop")
+                        sw_stop_btn = gr.Button("🛑 Stop Silicon talks", variant="stop")
                     sw_voice_cache = gr.Textbox(visible=False)
                     sw_raw_download_cache = gr.Textbox(visible=False)
                 with gr.Column(scale=2):
-                    sw_log_output = gr.Textbox(label="Software Asset Compilation Diagnostics Log", lines=15, interactive=False)
+                    sw_log_output = gr.Textbox(label="Application Diagnostics Log", lines=15, interactive=False)
 
-        #  KEEP ONLY THESE LINES (They look after silent focus-out syncing):
-    board_input.blur(fn=live_sync_buffer, inputs=[board_input], outputs=[board_input])
-    components_input.blur(fn=live_sync_buffer, inputs=[components_input], outputs=[components_input])
-    sw_prompt_input.blur(fn=live_sync_buffer, inputs=[sw_prompt_input], outputs=[sw_prompt_input])
-
-
-    # UI Theme Core Setup
-    theme_selector.change(fn=None, inputs=[theme_selector], outputs=None, js=theme_engine_js)
-    app.load(fn=None, inputs=[theme_selector], outputs=None, js=theme_engine_js)
+    # ==========================================
+    # EVENT LOGIC TRACK WRAPPERS AND ROUTING
+    # ==========================================
     
-    # Hardware Operations Block Pipeline
-    compile_hw_btn.click(
-        fn=handle_hardware_pipeline,
-        inputs=[board_input, components_input, manual_key_input],
-        outputs=[hw_log_output, hw_code_output, hw_wiring_output, hw_raw_download_cache, hw_voice_cache, bus_status_display]
-    ).then(fn=None, inputs=None, outputs=None, js=stop_sfx_js)
+    # Active Log Out Listener Routine
+    logout_btn.click(fn=None, inputs=None, js=logout_session_js)
     
-    hw_download_btn.click(fn=None, inputs=[hw_raw_download_cache], outputs=None, js=download_hw_js)
-    hw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, hw_voice_cache, hw_code_output], outputs=None, js=tts_javascript)
-    hw_stop_btn.click(fn=None, inputs=None, outputs=None, js=stop_tts_javascript)
+    # Dynamic Theme Injector Trigger
+    theme_selector.change(fn=None, inputs=[theme_selector], js=theme_engine_js)
+    app.load(fn=None, inputs=None, js=force_light_mode_js)
 
-    # Software Operations Block Pipeline
+      # Hardware Download Pipeline JavaScript Execution
+    hw_download_btn.click(fn=None, inputs=[hw_raw_download_cache], js=download_hw_js)
+
+    # Hardware Voice Assistant Management 
+    hw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, hw_voice_cache, hw_code_output], js=tts_javascript)
+    hw_stop_btn.click(fn=None, inputs=None, js=stop_tts_javascript)
+
+    # Software Pipeline Trigger Mapping
     compile_sw_btn.click(
         fn=handle_software_pipeline,
-        inputs=[gr.Textbox(value="HTML/JavaScript Canvas UI", visible=False), sw_prompt_input, manual_key_input],
+        inputs=[gr.State("html"), sw_prompt_input, manual_key_input],
         outputs=[sw_log_output, sw_code_output, sw_raw_download_cache, sw_voice_cache, bus_status_display]
-    ).then(fn=None, inputs=None, outputs=None, js=stop_sfx_js)
-    sw_download_btn.click(fn=None, inputs=[sw_raw_download_cache], outputs=None, js=download_sw_js)
-    sw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, sw_voice_cache, sw_code_output], outputs=None, js=tts_javascript)
-    sw_stop_btn.click(fn=None, inputs=None, outputs=None, js=stop_tts_javascript)
+    )
 
-# This must sit perfectly on its own un-indented line before launching the main name block
-app.title = "Complex Hardware AI Engine"
+    # Hardware Download Pipeline JavaScript Execution
+    sw_download_btn.click(fn=None, inputs=[sw_raw_download_cache], js=download_sw_js)
+
+    # Software Voice Assistant Management
+    sw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, sw_voice_cache, sw_raw_download_cache], js=tts_javascript)
+    sw_stop_btn.click(fn=None, inputs=None, js=stop_tts_javascript)
 
 if __name__ == "__main__":
     app.launch(
-        auth=("ZeroError", "123456"), 
-        auth_message="Please log in with your authorized Arro engine credentials.", 
+        auth=("ZeroError", "123456"),
+        auth_message="Please log in with your authorized Arro engine credentials.",
         server_name="0.0.0.0",   # Tells the cloud server to accept incoming traffic
-        server_port=7860,        # The standard port Hugging Face looks for
+        server_port=7860,       # The standard port Hugging Face looks for
         theme=gr.themes.Default(),
         js=force_light_mode_js,
         css=login_wall_css
