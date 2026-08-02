@@ -103,7 +103,8 @@ download_sw_js = """
 
 def live_sync_buffer(val): return val
 
-with gr.Blocks() as app:
+with gr.Blocks(head=head_js_payload) as app:
+
 
     
     # -------------------------------------------------------------------------
