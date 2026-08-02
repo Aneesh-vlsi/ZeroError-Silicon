@@ -14,7 +14,7 @@ def fetch_all_users():
         response = requests.get(DB_API_URL, timeout=5)
         if response.status_code == 200:
             user_data_list = response.json()
-            return {str(user.get('UserName', '')).strip(): str(user.get('Password', '')).strip() for user in user_data_list if 'UserName' in user}
+            return {str(user.get('username', '')).strip(): str(user.get('password', '')).strip() for user in user_data_list if 'UserName' in user}
     except Exception:
         pass
     return {"ZeroError": "123456"}
