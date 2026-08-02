@@ -7,6 +7,7 @@ force_light_mode_js = """
 }
 """
 
+# Premium custom login card layout configurations
 login_wall_css = """
 /* Smooth subtle grid pattern background for the login wall */
 .gradio-container-auth {
@@ -182,7 +183,7 @@ theme_engine_js = """
             position: absolute !important;
             top: 40% !important;
             left: 50% !important;
-            transform: translate(-50%, -50%) rotate(360deg); }
+            transform: translate(-50%, -50%) !important;
             z-index: 9999 !important;
         }
 
