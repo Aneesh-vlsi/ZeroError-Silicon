@@ -188,13 +188,12 @@ with gr.Blocks(css=login_wall_css) as app:
     sw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, sw_voice_cache, sw_raw_download_cache], js=tts_javascript)
     sw_stop_btn.click(fn=None, inputs=None, js=stop_tts_javascript)
 
-if __name__ == "__main__":
-    app.launch(
+ app.launch(
         auth=("ZeroError", "123456"),
         auth_message="Please log in with your authorized Arro engine credentials.",
         server_name="0.0.0.0",   # Tells the cloud server to accept incoming traffic
         server_port=7860,       # The standard port Hugging Face looks for
         theme=gr.themes.Default(),
         js=force_light_mode_js,
-        css=login_wall_css
+        css=login_wall_css     # Safely houses custom layout styling rules per Gradio standards
     )
