@@ -45,9 +45,9 @@ download_sw_js = """
 
 # Client-side logout action script that safely clears HTTP Basic Authentication headers
 logout_session_js = """
-(ev) => {
+() => {
     let currentURL = window.location.href;
-    let cleanURL = currentURL.replace(/^(https?:\\/\\/)(.*)/, '$1logout:logout@$2');
+    let cleanURL = currentURL.replace(/^(https?:\/\/)(.*)/, '$1logout:logout@$2');
     try {
         sessionStorage.clear();
         localStorage.clear();
@@ -88,7 +88,7 @@ with gr.Blocks() as app:
             interactive=True
         )
 
-       with gr.Tabs():
+    with gr.Tabs():
         # TAB 1: EMBEDDED HARDWARE FIRMWARE
         with gr.Tab("📟 Embedded Hardware Firmware"):
             gr.Markdown("### Secure Microcontroller Code & Wiring Synthesis Block")
