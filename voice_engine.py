@@ -1,6 +1,6 @@
 # voice_engine.py
 
-tts_javascript = r"""
+tts_javascript = """
 (voice_persona, text_to_speak, current_code_panel_value) => {
     // 1. Instantly flush out stuck queues to ensure zero audio overlap
     window.speechSynthesis.cancel();
@@ -45,7 +45,6 @@ tts_javascript = r"""
         .replace(/I'll/gi, " I will ")
         .replace(/let's/gi, " let us ")
         .replace(/[#*\[\]{}()\-+=_\/\\:;<>\`|]/g, " ")
-        .replace(/\s+/g, " ")
         .trim();
 
     // Split text cleanly by punctuation to manage steady breath gaps
@@ -122,6 +121,7 @@ tts_javascript = r"""
 }
 """
 
+# FIXED: Explicitly raises the cancel flag to clear and block the background execution loop immediately
 stop_tts_javascript = """
 () => {
     window.arroSpeechCancelFlag = true;
