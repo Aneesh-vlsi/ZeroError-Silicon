@@ -103,7 +103,15 @@ download_sw_js = """
 
 def live_sync_buffer(val): return val
 
-with gr.Blocks(head=head_js_payload) as app:
+with gr.Blocks(head=f"""
+<style>{login_wall_css}</style>
+<script>
+    {theme_engine_js if 'theme_engine_js' in globals() or 'theme_engine_js' in locals() else ''}
+    {force_light_mode_js if 'force_light_mode_js' in globals() or 'force_light_mode_js' in locals() else ''}
+</script>
+""") as app:
+    # Rest of your UI components go here...
+
 
 
     
