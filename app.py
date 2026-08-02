@@ -6,7 +6,7 @@ from theme_engine import theme_engine_js, force_light_mode_js, stop_sfx_js, logi
 from voice_engine import tts_javascript, stop_tts_javascript
 
 # 🌐 YOUR VERIFIED SHEETDB API URL ENDPOINT LINK
-DB_API_URL = "https://sheetdb.io"
+DB_API_URL = "https://sheetdb.io/api/v1/t7s7ew3vcwp2r"
 
 def fetch_all_users():
     """Queries the Google Sheet database to retrieve registered users safely."""
