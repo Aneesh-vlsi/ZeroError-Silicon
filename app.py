@@ -14,7 +14,7 @@ def fetch_all_users():
         response = requests.get(DB_API_URL, timeout=5)
         if response.status_code == 200:
             user_data_list = response.json()
-            return {str(user.get('username', '')).strip(): str(user.get('password', '')).strip() for user in user_data_list if 'UserName' in user}
+            return {str(user.get('username', '')).strip(): str(user.get('password', '')).strip() for user in user_data_list if 'username' in user}
     except Exception:
         pass
     return {"ZeroError": "123456"}
@@ -50,7 +50,7 @@ def process_signup(username, password, confirm_password):
     if username_clean in current_users:
         return "❌ Username already exists."
         
-    payload = {"data": [{"UserName": username_clean, "Password": password_clean}]}
+    payload = {"data": [{"username": username_clean, "password": password_clean}]}
     
     try:
         response = requests.post(DB_API_URL, json=payload, timeout=5)
