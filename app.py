@@ -175,8 +175,10 @@ if __name__ == "__main__":
     app.launch(
         auth=("ZeroError", "123456"), 
         auth_message="Please log in with your authorized Arro engine credentials.", 
-        share=True,
+        server_name="0.0.0.0",   # MANDATORY FOR RENDER CORES
+        server_port=7860,        # MANDATORY FOR PORT ROUTING
         theme=gr.themes.Default(),
         js=force_light_mode_js,
         css=login_wall_css
     )
+
