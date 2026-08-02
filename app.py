@@ -103,7 +103,8 @@ download_sw_js = """
 
 def live_sync_buffer(val): return val
 
-with gr.Blocks(css=login_wall_css) as app:
+with gr.Blocks() as app:
+
     
     # -------------------------------------------------------------------------
     # AUTH PANEL CONTAINER (LOGIN & SIGNUP CORES)
@@ -260,5 +261,6 @@ if __name__ == "__main__":
         server_name="0.0.0.0",
         server_port=7860,
         theme=gr.themes.Default(),
-        js=force_light_mode_js
+        js=force_light_mode_js,
+        css=login_wall_css       # 👈 PLACED SECURELY HERE FOR GRADIO 6.0 compatibility
     )
