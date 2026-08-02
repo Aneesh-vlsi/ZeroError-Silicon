@@ -45,27 +45,23 @@ download_sw_js = """
 
 # Client-side logout action script that safely clears HTTP Basic Authentication headers
 logout_session_js = """
-() => {
+(ev) => {
     let currentURL = window.location.href;
     let cleanURL = currentURL.replace(/^(https?:\\/\\/)(.*)/, '$1logout:logout@$2');
-    
-    // Fallback: Clear sessionStorage/localStorage structures if used by Gradio internally
     try {
         sessionStorage.clear();
         localStorage.clear();
     } catch(e) {}
-    
     window.location.href = cleanURL;
 }
 """
 
-with gr.Blocks(css=login_wall_css) as app:
+with gr.Blocks() as app:
     with gr.Row(elem_id="header-bar-container", variant="compact"):
         with gr.Column(scale=4):
             gr.Markdown("# 🤖 ZeroError Silicon")
             gr.Markdown("<p style='color: #475569 !important; font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif !important; font-size: 15px !important; font-weight: 500 !important; margin: 4px 0 16px 0 !important; padding: 0 !important; line-height: 1.4 !important; letter-spacing: -0.01em !important;'>Next-Generation AI Tooling for Heterogeneous Microcontrollers</p>")
         with gr.Column(scale=1, min_width=120):
-            # Native modern Log Out action button with an icon anchor within the header row
             logout_btn = gr.Button("🚪 Log Out", variant="stop", size="sm")
 
     with gr.Row():
@@ -92,7 +88,7 @@ with gr.Blocks(css=login_wall_css) as app:
             interactive=True
         )
 
-    with gr.Tabs():
+       with gr.Tabs():
         # TAB 1: EMBEDDED HARDWARE FIRMWARE
         with gr.Tab("📟 Embedded Hardware Firmware"):
             gr.Markdown("### Secure Microcontroller Code & Wiring Synthesis Block")
@@ -167,7 +163,14 @@ with gr.Blocks(css=login_wall_css) as app:
     theme_selector.change(fn=None, inputs=[theme_selector], js=theme_engine_js)
     app.load(fn=None, inputs=None, js=force_light_mode_js)
 
-      # Hardware Download Pipeline JavaScript Execution
+    # Hardware Pipeline Trigger Mapping
+    compile_hw_btn.click(
+        fn=handle_hardware_pipeline,
+        inputs=[board_input, components_input, manual_key_input],
+        outputs=[hw_log_output, hw_code_output, hw_wiring_output, hw_raw_download_cache, hw_voice_cache, bus_status_display]
+    )
+
+    # Hardware Download Pipeline JavaScript Execution
     hw_download_btn.click(fn=None, inputs=[hw_raw_download_cache], js=download_hw_js)
 
     # Hardware Voice Assistant Management 
@@ -181,19 +184,20 @@ with gr.Blocks(css=login_wall_css) as app:
         outputs=[sw_log_output, sw_code_output, sw_raw_download_cache, sw_voice_cache, bus_status_display]
     )
 
-    # Hardware Download Pipeline JavaScript Execution
+    # Software Download Pipeline JavaScript Execution
     sw_download_btn.click(fn=None, inputs=[sw_raw_download_cache], js=download_sw_js)
 
     # Software Voice Assistant Management
     sw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, sw_voice_cache, sw_raw_download_cache], js=tts_javascript)
     sw_stop_btn.click(fn=None, inputs=None, js=stop_tts_javascript)
 
- app.launch(
+if __name__ == "__main__":
+    app.launch(
         auth=("ZeroError", "123456"),
         auth_message="Please log in with your authorized Arro engine credentials.",
-        server_name="0.0.0.0",   # Tells the cloud server to accept incoming traffic
-        server_port=7860,       # The standard port Hugging Face looks for
+        server_name="0.0.0.0",
+        server_port=7860,
         theme=gr.themes.Default(),
         js=force_light_mode_js,
-        css=login_wall_css     # Safely houses custom layout styling rules per Gradio standards
+        css=login_wall_css
     )
