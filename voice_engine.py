@@ -44,7 +44,8 @@ tts_javascript = """
         .replace(/LED/gi, " L-E-D ")
         .replace(/I'll/gi, " I will ")
         .replace(/let's/gi, " let us ")
-        .replace(/[#*\[\]{}()\-+=_\/\\:;<>\`|]/g, " ")
+        .replace(/[#*\\[\\]{}()\\-+_=\\/\\\\|:;<>\'"`]/g, " ")
+
         .trim();
 
     // Split text cleanly by punctuation to manage steady breath gaps
