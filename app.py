@@ -47,7 +47,7 @@ download_sw_js = """
 logout_session_js = """
 () => {
     let currentURL = window.location.href;
-    let cleanURL = currentURL.replace(/^(https?:\/\/)(.*)/, '$1logout:logout@$2');
+    let cleanURL = currentURL.replace(//^(https?:\/\/)(.*)/, '$1logout:logout@$2');
     try {
         sessionStorage.clear();
         localStorage.clear();
