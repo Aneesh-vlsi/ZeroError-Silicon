@@ -190,6 +190,53 @@ theme_engine_js = """
         @keyframes arroSpinnerKeyframe {
             to { transform: translate(-50%, -50%) rotate(360deg); }
         }
+
+        /* ========================================================
+           UI POLISH: SPACING & CARD STYLING
+           ======================================================== */
+        .gr-group {
+            border-radius: 12px !important;
+        }
+
+        .tabs > .tab-nav {
+            gap: 4px !important;
+            border-bottom: 2px solid ${borderColor} !important;
+        }
+
+        .tabs > .tab-nav button {
+            border-radius: 8px 8px 0 0 !important;
+            font-weight: 600 !important;
+            padding: 10px 18px !important;
+        }
+
+        .tabs > .tab-nav button.selected {
+            color: ${primaryColor} !important;
+            border-bottom: 2px solid ${primaryColor} !important;
+        }
+
+        #header-bar-container {
+            padding-bottom: 12px !important;
+            border-bottom: 1px solid ${borderColor} !important;
+            margin-bottom: 16px !important;
+        }
+
+        button.secondary, button.stop {
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+        }
+
+        .block, .form {
+            border-radius: 10px !important;
+        }
+
+        @media (max-width: 768px) {
+            .gr-row, [class*="gr-row"] {
+                gap: 16px !important;
+            }
+            #header-bar-container {
+                text-align: center !important;
+            }
+        }
     `;
     
     let styleElement = document.createElement("style");
