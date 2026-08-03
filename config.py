@@ -11,7 +11,13 @@ API_KEY_POOL = [
     os.environ.get("GEMINI_KEY_1", ""),
     os.environ.get("GEMINI_KEY_2", ""),
     os.environ.get("GEMINI_KEY_3", ""),
-    os.environ.get("GEMINI_KEY_4", "")
+    os.environ.get("GEMINI_KEY_4", ""),
+    os.environ.get("GEMINI_KEY_5", ""),
+    os.environ.get("GEMINI_KEY_6", ""),
+    os.environ.get("GEMINI_KEY_7", ""),
+    os.environ.get("GEMINI_KEY_8", ""),
+    os.environ.get("GEMINI_KEY_9", ""),
+    os.environ.get("GEMINI_KEY_10", "")
 ]
 
 # Filter out empty or unconfigured variable placeholders
