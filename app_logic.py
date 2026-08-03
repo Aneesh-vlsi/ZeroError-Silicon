@@ -2,6 +2,7 @@
 import tempfile
 import os
 import re
+import html
 from config import infer_hardware_and_generate_code, generate_voice_explanation, generate_pure_software_code
 
 def handle_hardware_pipeline(board: str, components: str, runtime_key: str):
@@ -56,9 +57,9 @@ def handle_software_pipeline(language: str, prompt: str, runtime_key: str):
     if not prompt.strip():
         return (
             "=== SOFTWARE PIPELINE REJECTED ===\n\nError: Requirements text box parameters cannot be empty.",
-            "# ERROR: MISSING PIPELINE DESCRIPTION PARAMETERS", 
-            "", 
-            "The application build specifications box is currently empty.", 
+            "<p style='padding:20px;color:#991b1b;'>⚠️ Missing pipeline description parameters.</p>",
+            "",
+            "The application build specifications box is currently empty.",
             "Status: Aborted due to missing functional requirements."
         )
 
@@ -67,10 +68,27 @@ def handle_software_pipeline(language: str, prompt: str, runtime_key: str):
         f"• Selected Language Target: {language}\n"
         "╚═  Status: Pure software script container assembled safely."
     )
-    
+
     compiled_software, key_used = generate_pure_software_code(language, prompt, runtime_key)
+
+    # Render the generated app inside its own sandboxed iframe so its full-page
+    # CSS/JS (dark themes, absolute positioning, fixed badges, etc.) doesn't
+    # collide with the host Gradio page's styles — and vice versa. This fixes
+    # the overlapping elements, hidden download button, and low-contrast text
+    # that happened when the generated HTML was injected directly into the page.
+    safe_html = html.escape(compiled_software, quote=True)
+    preview_html = (
+        f'<iframe srcdoc="{safe_html}" '
+        'style="width:100%; height:70vh; min-height:420px; border:1px solid #e2e8f0; '
+        'border-radius:10px; background:#fff;" '
+        'sandbox="allow-scripts allow-same-origin allow-forms"></iframe>'
+    )
+
     raw_explanation = f"Verification absolute. This source asset completely implements the code needed to satisfy your logic guidelines."
     clean_voice_cache = re.sub(r'[#\*\[\]\(\)\{\}\-\+\=\_\/\\\:\;\<\>\`\|]', ' ', raw_explanation).strip()
-    
+
     status_bus = f"Status: Application asset assembled safely [{key_used} Active]."
-    return diagnostic_logs, compiled_software, compiled_software, clean_voice_cache, status_bus
+    # Note: preview_html goes to the on-page preview; compiled_software (the
+    # raw, unmodified code) still goes to the download cache so the exported
+    # file is exactly what was generated, with no iframe wrapper baked in.
+    return diagnostic_logs, preview_html, compiled_software, clean_voice_cache, status_bus
