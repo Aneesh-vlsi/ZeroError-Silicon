@@ -44,17 +44,19 @@ download_sw_js = """
 """
 
 # Client-side logout action script that safely clears HTTP Basic Authentication headers
+# Client-side logout action script that safely clears HTTP Basic Authentication headers
 logout_session_js = """
 () => {
-    let currentURL = window.location.href;
-    let cleanURL = currentURL.replace(r'/^(https?:\/\/)(.*)/', '$1logout:logout@$2');
     try {
         sessionStorage.clear();
         localStorage.clear();
     } catch(e) {}
-    window.location.href = cleanURL;
+    
+    // This forces the browser to jump directly back to your clean homepage/login screen
+    window.location.href = window.location.origin;
 }
 """
+
 
 with gr.Blocks() as app:
     with gr.Row(elem_id="header-bar-container", variant="compact"):
