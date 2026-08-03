@@ -44,26 +44,17 @@ download_sw_js = """
 """
 
 # Client-side logout action script that safely clears HTTP Basic Authentication headers
-# Client-side logout action script that safely clears HTTP Basic Authentication headers
-# Client-side logout action script that safely clears HTTP Basic Authentication headers
 logout_session_js = """
 () => {
+    let currentURL = window.location.href;
+    let cleanURL = currentURL.replace(/^(https?:\/\/)(.*)/, '$1logout:logout@$2');
     try {
         sessionStorage.clear();
         localStorage.clear();
-        
-        # Open a background request to flush the browser's authentication memory
-        var req = new XMLHttpRequest();
-        req.open("GET", window.location.origin, false, "logout", "logout");
-        req.send(null);
     } catch(e) {}
-    
-    # Reload the page cleanly to display the orange login prompt interface
-    window.location.reload();
+    window.location.href = cleanURL;
 }
 """
-
-
 
 with gr.Blocks() as app:
     with gr.Row(elem_id="header-bar-container", variant="compact"):
