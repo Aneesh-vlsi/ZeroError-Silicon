@@ -1,6 +1,7 @@
 # config.py
 import os
 import random
+import re
 from google import genai
 from google.genai import types
 
@@ -123,13 +124,112 @@ def generate_voice_explanation(board: str, components: str, runtime_key: str) ->
     summary_prompt = f"Kindly explain how this configuration works together like a reassuring friend: Board={board}, Peripherals={components}"
     return safe_api_call(summary_prompt, system_instruction, runtime_key)
 
+
+# ============================================================
+# SECURE-CONTEXT / PERMISSIONS SAFETY NET
+# ============================================================
+# Browsers (especially mobile Safari/Chrome) block camera, mic, and
+# geolocation APIs on file:// origins and plain-HTTP non-localhost origins.
+# This guard is injected into every generated app regardless of what the
+# model produced, so users always get a clear explanation instead of a
+# silently broken feature.
+_SECURE_CONTEXT_GUARD_SNIPPET = """
+<script>
+(function() {
+    function isInsecureContext() {
+        var isLocalhost = ["localhost", "127.0.0.1", "[::1]"].indexOf(location.hostname) !== -1;
+        return location.protocol !== "https:" && !isLocalhost;
+    }
+    function showGuardBanner(message) {
+        if (document.getElementById("zes-secure-guard-banner")) return;
+        var banner = document.createElement("div");
+        banner.id = "zes-secure-guard-banner";
+        banner.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:999999;background:#fef2f2;border-bottom:2px solid #fca5a5;color:#991b1b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;font-weight:600;padding:10px 14px;line-height:1.4;text-align:center;";
+        banner.innerHTML = message;
+        document.body.insertBefore(banner, document.body.firstChild);
+    }
+    if (isInsecureContext()) {
+        window.__ZES_INSECURE_CONTEXT__ = true;
+        document.addEventListener("DOMContentLoaded", function() {
+            showGuardBanner("⚠️ Camera, microphone, and location features need a secure connection. Open this file via <code>http://localhost</code> or host it online with HTTPS (e.g. Netlify, GitHub Pages) &mdash; it will not work when opened directly as a local file, especially on mobile.");
+        });
+    }
+})();
+</script>
+"""
+
+def _inject_secure_context_guard(html_code: str) -> str:
+    """Ensures every generated app has: a mobile viewport meta tag, and the
+    secure-context permission guard, regardless of what the model produced."""
+    result = html_code
+
+    # Ensure a mobile-responsive viewport tag exists
+    if "viewport" not in result.lower():
+        viewport_tag = '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        if re.search(r"<head[^>]*>", result, re.IGNORECASE):
+            result = re.sub(r"(<head[^>]*>)", r"\1\n" + viewport_tag, result, count=1, flags=re.IGNORECASE)
+        else:
+            result = viewport_tag + result
+
+    # Inject the secure-context guard right after <body> if present, else prepend
+    if re.search(r"<body[^>]*>", result, re.IGNORECASE):
+        result = re.sub(r"(<body[^>]*>)", r"\1\n" + _SECURE_CONTEXT_GUARD_SNIPPET, result, count=1, flags=re.IGNORECASE)
+    else:
+        result = _SECURE_CONTEXT_GUARD_SNIPPET + result
+
+    return result
+
+
 def generate_pure_software_code(language: str, prompt: str, runtime_key: str) -> tuple[str, str]:
-    code_prompt = f"Target Environment Language: Pure Front-End HTML5/CSS3\nFunctional Asset Requirements: {prompt}\nWrite comprehensive operational client-side script code directly without any server commentaries or python wrappers."
-    
-    system_instruction = (
-        "You are a master front-end software architect and UI/UX expert. Output clean, fully realized HTML5, CSS3, and native JavaScript code text blocks only."
+    code_prompt = (
+        f"Functional Asset Requirements: {prompt}\n\n"
+        "Build this as a single, fully self-contained, REAL, WORKING HTML5 file "
+        "(inline CSS and JavaScript only, no build tools, no server, no backend). "
+        "It must be genuinely functional, not a mockup or static demo."
     )
+
+    system_instruction = (
+        "You are a master front-end software architect. Output ONLY a single complete "
+        "HTML5 document (inline <style> and <script>) implementing the user's request as "
+        "REAL, WORKING functionality — never a static mockup, placeholder, or fake animation "
+        "pretending to be the real feature. Follow these rules precisely:\n\n"
+        "1. MOBILE + DESKTOP COMPATIBLE: Always include "
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">, and use "
+        "responsive layouts (flexbox/grid, relative units) that work on small phone screens "
+        "and desktop windows alike. Buttons and tap targets must be large enough for touch.\n\n"
+        "2. CAMERA / OBJECT DETECTION / COMPUTER VISION requests: use "
+        "navigator.mediaDevices.getUserMedia({video:true}) to access the real camera into a "
+        "<video> element. For AI object/image detection, load TensorFlow.js and the "
+        "coco-ssd model from a public CDN (e.g. https://cdn.jsdelivr.net/npm/@tensorflow/tfjs "
+        "and @tensorflow-models/coco-ssd), run real inference on the live video frames, and "
+        "draw real bounding boxes/labels on a <canvas> overlay. Wrap camera access in "
+        "try/catch and show a clear on-screen message if permission is denied or unavailable.\n\n"
+        "3. LOCATION / MAPS / 'REAL-TIME TRAFFIC IN MY LOCALITY' requests: use "
+        "navigator.geolocation.getCurrentPosition / watchPosition to get the user's real "
+        "coordinates, and render a real interactive map using Leaflet.js + OpenStreetMap "
+        "tiles loaded from CDN (https://unpkg.com/leaflet), centered on the user's real "
+        "location with a marker. Since live traffic-flow data requires a paid provider key "
+        "(e.g. TomTom, Google Maps, HERE), include a labeled input field where the user can "
+        "paste their own API key to enable a live traffic overlay, and clearly state in the "
+        "UI when the app is showing 'Demo/simulated traffic data' versus real data from a "
+        "provided key. Never silently fabricate data and present it as real.\n\n"
+        "4. PERMISSIONS: Always wrap getUserMedia/geolocation calls in try/catch, and show a "
+        "clear, visible on-page message (not just a console log or alert()) explaining what "
+        "went wrong and what the user can do (e.g. 'Camera permission denied — please allow "
+        "camera access in your browser settings and reload').\n\n"
+        "5. SELF-CONTAINED: Only reference external resources via public CDN <script>/<link> "
+        "tags (jsdelivr, unpkg, cdnjs). No npm install, no build step, no server-side code, "
+        "no relative imports to files that don't exist.\n\n"
+        "6. Output raw HTML only — no markdown code fences, no commentary before or after "
+        "the document."
+    )
+
     raw_software, active_key_used = safe_api_call(code_prompt, system_instruction, runtime_key)
+
+    if "QUOTA_ERROR" in raw_software:
+        return raw_software, active_key_used
+
     clean_software = raw_software.replace("```html", "").replace("```css", "").replace("```javascript", "").replace("```", "").strip()
+    clean_software = _inject_secure_context_guard(clean_software)
 
     return clean_software, active_key_used
