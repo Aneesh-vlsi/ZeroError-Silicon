@@ -132,12 +132,13 @@ with gr.Blocks() as app:
                     sw_code_output = gr.HTML(label="2️⃣ Live Functional Application Workspace Preview")
                     gr.Markdown("---")
                     
-                    # HIGH-VISIBILITY RED NOTICE CONTAINER EMBEDDED
+                    # INFORMATIVE USAGE NOTICE
                     gr.HTML(value="""
-                        <div style="background-color: #fef2f2; border: 1px solid #fee2e2; border-radius: 8px; padding: 12px 16px; margin: 10px 0 20px 0; display: flex; align-items: center; gap: 8px;">
-                            <span style="color: #dc2626; font-size: 18px; font-weight: bold; line-height: 1;">⚠️</span>
-                            <p style="color: #991b1b !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; font-size: 13px !important; font-weight: 600 !important; margin: 0 !important; padding: 0 !important; line-height: 1.4 !important;">
-                                Notice: Interactive phone hardware elements (like camera lenses, microphone feeds, or GPS location markers) are restricted inside this embedded preview area. Kindly click 'Download Software Code Locally' below to launch the functional app directly inside your standalone browser window context.
+                        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 16px; margin: 10px 0 20px 0; display: flex; align-items: flex-start; gap: 8px;">
+                            <span style="color: #2563eb; font-size: 18px; font-weight: bold; line-height: 1.2;">ℹ️</span>
+                            <p style="color: #1e3a8a !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important; font-size: 13px !important; font-weight: 500 !important; margin: 0 !important; padding: 0 !important; line-height: 1.5 !important;">
+                                <strong>How this works:</strong> The preview above runs in a sandboxed frame, so features like camera, microphone, or GPS may be limited here depending on your browser.
+                                For full functionality &mdash; especially on mobile &mdash; click <strong>'Download Software Code Locally'</strong>, then either open it via <code>localhost</code> (desktop testing) or host the downloaded file on a free HTTPS service like Netlify or GitHub Pages (required for camera/location access on phones). The app itself will show an on-screen note if it detects it's running somewhere those features can't work.
                             </p>
                         </div>
                     """)
@@ -161,6 +162,8 @@ with gr.Blocks() as app:
     
     # Dynamic Theme Injector Trigger
     theme_selector.change(fn=None, inputs=[theme_selector], js=theme_engine_js)
+    # Apply the selected theme (incl. UI polish) immediately on first page load,
+    # not only after the user manually changes the dropdown.
     app.load(fn=None, inputs=[theme_selector], js=theme_engine_js)
 
     # Hardware Pipeline Trigger Mapping
