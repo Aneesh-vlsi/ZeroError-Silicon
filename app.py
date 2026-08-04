@@ -161,7 +161,7 @@ with gr.Blocks() as app:
     
     # Dynamic Theme Injector Trigger
     theme_selector.change(fn=None, inputs=[theme_selector], js=theme_engine_js)
-    app.load(fn=None, inputs=None, js=force_light_mode_js)
+    app.load(fn=None, inputs=[theme_selector], js=theme_engine_js)
 
     # Hardware Pipeline Trigger Mapping
     compile_hw_btn.click(
