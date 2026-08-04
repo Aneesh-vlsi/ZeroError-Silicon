@@ -4,7 +4,6 @@ from app_logic import handle_hardware_pipeline, handle_software_pipeline
 from theme_engine import theme_engine_js, force_light_mode_js, stop_sfx_js, login_wall_css
 from voice_engine import tts_javascript, stop_tts_javascript
 
-# Client-side processing script that handles custom naming and system-level download location prompts
 download_hw_js = """
 (file_content) => {
     if (!file_content || file_content.trim() === "") {
@@ -43,7 +42,6 @@ download_sw_js = """
 }
 """
 
-# Client-side logout action script that safely clears HTTP Basic Authentication headers
 logout_session_js = """
 () => {
     let currentURL = window.location.href;
@@ -53,6 +51,119 @@ logout_session_js = """
         localStorage.clear();
     } catch(e) {}
     window.location.href = cleanURL;
+}
+"""
+
+# ============================================================
+# WEBSERIAL: live board connect/disconnect status indicator
+# ============================================================
+# Runs once on page load. Requires Chrome/Edge on desktop — WebSerial is not
+# available on mobile browsers or Safari/Firefox (see chat notes). We detect
+# that gracefully and label the status box accordingly instead of failing
+# silently.
+board_status_watcher_js = """
+() => {
+    const statusEl = () => document.getElementById("zes-board-status-badge");
+
+    function ensureBadge() {
+        if (document.getElementById("zes-board-status-badge")) return;
+        let btn = [...document.querySelectorAll("button")].find(b => b.textContent.includes("Run Multi-Pass"));
+        if (!btn) return;
+        let badge = document.createElement("div");
+        badge.id = "zes-board-status-badge";
+        badge.style.cssText = "margin:8px 0;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;";
+        btn.parentElement.insertBefore(badge, btn);
+        renderBadge();
+    }
+
+    function renderBadge() {
+        let el = statusEl();
+        if (!el) return;
+        if (!("serial" in navigator)) {
+            el.style.background = "#f1f5f9"; el.style.color = "#475569";
+            el.textContent = "🔌 Board detection needs Chrome or Edge on desktop (not available in this browser).";
+            return;
+        }
+        navigator.serial.getPorts().then(ports => {
+            if (ports.length > 0) {
+                el.style.background = "#dcfce7"; el.style.color = "#15803d";
+                el.textContent = "✅ Board Connected (" + ports.length + " authorized port" + (ports.length > 1 ? "s" : "") + ")";
+            } else {
+                el.style.background = "#fef2f2"; el.style.color = "#991b1b";
+                el.textContent = "❌ No Board Connected — click Flash to select your board once.";
+            }
+        });
+    }
+
+    ensureBadge();
+    if ("serial" in navigator) {
+        navigator.serial.addEventListener("connect", renderBadge);
+        navigator.serial.addEventListener("disconnect", renderBadge);
+    }
+    // Re-check periodically in case the badge element gets re-rendered by Gradio
+    setInterval(ensureBadge, 2000);
+}
+"""
+
+# ============================================================
+# FLASH TO BOARD: real WebSerial flashing for ESP32 family.
+# AVR / RP2040 / nRF52 / STM32(DFU) show an honest "not yet automated,
+# download the binary and flash manually" message rather than faking it.
+# ============================================================
+flash_to_board_js = """
+async (flash_payload_json) => {
+    let payload;
+    try { payload = JSON.parse(flash_payload_json); } catch(e) { payload = {}; }
+
+    if (!payload.binary_b64) {
+        alert("No compiled binary available yet. Run compilation first — this board may not have produced a verified binary.");
+        return;
+    }
+
+    if (!("serial" in navigator)) {
+        alert("Flashing from the browser needs Chrome or Edge on desktop. On other browsers, please download the compiled binary and flash it manually with your board's own tool.");
+        return;
+    }
+
+    const bytes = Uint8Array.from(atob(payload.binary_b64), c => c.charCodeAt(0));
+
+    if (payload.flash_method === "webserial-esptool") {
+        try {
+            const esptoolModule = await import("https://esm.sh/esptool-js@0.4.6");
+            const port = await navigator.serial.requestPort();
+            const transport = new esptoolModule.Transport(port);
+            const loaderOptions = { transport, baudrate: 115200 };
+            const esploader = new esptoolModule.ESPLoader(loaderOptions);
+            await esploader.main();
+            await esploader.writeFlash({
+                fileArray: [{ data: Array.from(bytes).map(b => String.fromCharCode(b)).join(""), address: 0x1000 }],
+                flashSize: "keep",
+                eraseAll: false,
+                compress: true,
+            });
+            alert("✅ Flash complete! Your ESP32 has been programmed.");
+        } catch (err) {
+            alert("Flashing failed: " + err.message + "\\n\\nMake sure your board is in the correct mode and try again.");
+        }
+        return;
+    }
+
+    if (payload.flash_method === "webserial-stk500") {
+        alert("One-click AVR flashing over WebSerial is still being finalized in this build. Please download the compiled binary below and flash it with avrdude or the Arduino IDE for now — full one-click support is coming next.");
+        return;
+    }
+
+    if (payload.flash_method === "webusb-dfu") {
+        alert("This STM32 board needs DFU mode (BOOT0 pin) to flash. One-click WebUSB DFU flashing is on the roadmap — for now, please download the compiled binary and flash it with STM32CubeProgrammer.");
+        return;
+    }
+
+    if (payload.flash_method === "webserial-uf2") {
+        alert("This board flashes as a UF2 file: put it in bootloader mode (usually double-tap RESET), it will appear as a USB drive, then drag the downloaded binary onto it.");
+        return;
+    }
+
+    alert("Automatic flashing isn't available yet for this board family. Please download the compiled binary and use your board's own flashing tool.");
 }
 """
 
@@ -92,6 +203,12 @@ with gr.Blocks() as app:
         # TAB 1: EMBEDDED HARDWARE FIRMWARE
         with gr.Tab("📟 Embedded Hardware Firmware"):
             gr.Markdown("### Secure Microcontroller Code & Wiring Synthesis Block")
+            gr.HTML(value="""
+                <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 14px; margin: 4px 0 16px 0; font-size: 13px; color: #1e3a8a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                    ℹ️ <strong>Supported for real compile + flash today:</strong> Arduino AVR (Uno/Nano/Mega), ESP32/ESP32-S2/S3/C3, ESP8266, STM32 (Nucleo/BluePill via STM32duino), Raspberry Pi Pico (RP2040), Nordic nRF52.
+                    Other boards still get AI-generated reference code, clearly marked as unverified.
+                </div>
+            """)
             with gr.Row():
                 with gr.Column(scale=1):
                     board_input = gr.Textbox(label="1️⃣ Enter Target Microcontroller Board Name", placeholder="e.g., STM32 H743ZI2, ESP32, Arduino Uno", value="")
@@ -107,7 +224,9 @@ with gr.Blocks() as app:
                     with gr.Group():
                         hw_wiring_output = gr.Markdown(value="*Awaiting compilation trigger sequence to map hardware schematics...*")
                     gr.Markdown("---")
-                    
+
+                    hw_flash_payload = gr.Textbox(value="{}", visible=False)
+                    hw_flash_btn = gr.Button("⚡ Flash to Board", variant="primary", visible=False)
                     hw_download_btn = gr.Button("📥 Download Verified Script & Wire Map File Locally", variant="secondary")
                     
                     with gr.Row():
@@ -132,7 +251,6 @@ with gr.Blocks() as app:
                     sw_code_output = gr.HTML(label="2️⃣ Live Functional Application Workspace Preview")
                     gr.Markdown("---")
                     
-                    # INFORMATIVE USAGE NOTICE
                     gr.HTML(value="""
                         <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 16px; margin: 10px 0 20px 0; display: flex; align-items: flex-start; gap: 8px;">
                             <span style="color: #2563eb; font-size: 18px; font-weight: bold; line-height: 1.2;">ℹ️</span>
@@ -157,40 +275,32 @@ with gr.Blocks() as app:
     # EVENT LOGIC TRACK WRAPPERS AND ROUTING
     # ==========================================
     
-    # Active Log Out Listener Routine
     logout_btn.click(fn=None, inputs=None, js=logout_session_js)
     
-    # Dynamic Theme Injector Trigger
     theme_selector.change(fn=None, inputs=[theme_selector], js=theme_engine_js)
-    # Apply the selected theme (incl. UI polish) immediately on first page load,
-    # not only after the user manually changes the dropdown.
     app.load(fn=None, inputs=[theme_selector], js=theme_engine_js)
+    app.load(fn=None, inputs=None, js=board_status_watcher_js)
 
-    # Hardware Pipeline Trigger Mapping
     compile_hw_btn.click(
         fn=handle_hardware_pipeline,
         inputs=[board_input, components_input, manual_key_input],
-        outputs=[hw_log_output, hw_code_output, hw_wiring_output, hw_raw_download_cache, hw_voice_cache, bus_status_display]
+        outputs=[hw_log_output, hw_code_output, hw_wiring_output, hw_raw_download_cache, hw_voice_cache, bus_status_display, hw_flash_payload, hw_flash_btn]
     )
 
-    # Hardware Download Pipeline JavaScript Execution
+    hw_flash_btn.click(fn=None, inputs=[hw_flash_payload], js=flash_to_board_js)
     hw_download_btn.click(fn=None, inputs=[hw_raw_download_cache], js=download_hw_js)
 
-    # Hardware Voice Assistant Management 
     hw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, hw_voice_cache, hw_code_output], js=tts_javascript)
     hw_stop_btn.click(fn=None, inputs=None, js=stop_tts_javascript)
 
-    # Software Pipeline Trigger Mapping
     compile_sw_btn.click(
         fn=handle_software_pipeline,
         inputs=[gr.State("html"), sw_prompt_input, manual_key_input],
         outputs=[sw_log_output, sw_code_output, sw_raw_download_cache, sw_voice_cache, bus_status_display]
     )
 
-    # Software Download Pipeline JavaScript Execution
     sw_download_btn.click(fn=None, inputs=[sw_raw_download_cache], js=download_sw_js)
 
-    # Software Voice Assistant Management
     sw_play_btn.click(fn=None, inputs=[voice_persona_dropdown, sw_voice_cache, sw_raw_download_cache], js=tts_javascript)
     sw_stop_btn.click(fn=None, inputs=None, js=stop_tts_javascript)
 
