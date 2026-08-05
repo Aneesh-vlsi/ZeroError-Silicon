@@ -36,15 +36,20 @@ def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, s
 
     log_lines = []
 
-    # Ensure the required core is installed (no-op if already present —
-    # cores are normally pre-installed at Docker build time for speed, this
-    # is just a safety net in case a new board is added to the registry
-    # without rebuilding the image yet).
-    install_result = subprocess.run(
-        [ARDUINO_CLI_BIN, "core", "install", core],
-        capture_output=True, text=True, timeout=300
+    # Only install the core if it's not already present (cores are normally
+    # pre-installed at Docker build time). Checking first avoids an
+    # unnecessary network call on every single compile request.
+    list_result = subprocess.run(
+        [ARDUINO_CLI_BIN, "core", "list"], capture_output=True, text=True, timeout=30
     )
-    log_lines.append(f"[core install: {core}]\n{install_result.stdout}\n{install_result.stderr}")
+    if core not in list_result.stdout:
+        install_result = subprocess.run(
+            [ARDUINO_CLI_BIN, "core", "install", core],
+            capture_output=True, text=True, timeout=300
+        )
+        log_lines.append(f"[core install: {core}]\n{install_result.stdout}\n{install_result.stderr}")
+    else:
+        log_lines.append(f"[core already installed: {core}]")
 
     compile_result = subprocess.run(
         [ARDUINO_CLI_BIN, "compile", "--fqbn", fqbn, sketch_dir, "--export-binaries"],
