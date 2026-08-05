@@ -42,7 +42,7 @@ download_sw_js = """
 }
 """
 
-logout_session_js = """
+logout_session_js = r"""
 () => {
     let currentURL = window.location.href;
     let cleanURL = currentURL.replace(/^(https?:\/\/)(.*)/, '$1logout:logout@$2');
