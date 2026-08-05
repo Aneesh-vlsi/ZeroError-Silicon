@@ -7,9 +7,13 @@ FROM python:3.11-slim
 
 # --- System dependencies ---
 # curl: needed to download arduino-cli
+# ca-certificates: needed for curl to verify HTTPS (missing on slim images)
+# tar: needed to unpack the arduino-cli download
 # build-essential: some board cores need a C toolchain during install
 RUN apt-get update && apt-get install -y \
     curl \
+    ca-certificates \
+    tar \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -44,5 +48,3 @@ COPY . .
 EXPOSE 7860
 
 CMD ["python", "app.py"]
-
-
