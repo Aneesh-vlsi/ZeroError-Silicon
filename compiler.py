@@ -1,0 +1,75 @@
+# compiler.py
+#
+# Wraps the free, open-source `arduino-cli` tool to ACTUALLY compile
+# generated sketches server-side. This turns "the AI wrote code that looks
+# right" into "the code compiled successfully for this exact chip" — a real
+# correctness signal instead of just trusting the model's output.
+#
+# Requires arduino-cli + the relevant board cores to be installed in the
+# deployment image (see the Dockerfile snippet provided alongside this file).
+# Everything used here — arduino-cli itself, and every board core in
+# board_registry.py — is free and open-source; there is no paid dependency.
+
+import subprocess
+import tempfile
+import os
+import shutil
+
+ARDUINO_CLI_BIN = "arduino-cli"  # assumes it's on PATH inside the container
+
+
+def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, str]:
+    """Compiles `sketch_code` for the given FQBN using arduino-cli.
+
+    Returns (success, binary_path_or_empty, log_output).
+    The caller is responsible for deleting the returned binary's parent
+    temp directory once it's been read/sent to the client.
+    """
+    workdir = tempfile.mkdtemp(prefix="zes_sketch_")
+    sketch_dir = os.path.join(workdir, "sketch")
+    os.makedirs(sketch_dir, exist_ok=True)
+
+    # arduino-cli requires the .ino file to share its parent folder's name
+    sketch_path = os.path.join(sketch_dir, "sketch.ino")
+    with open(sketch_path, "w") as f:
+        f.write(sketch_code)
+
+    log_lines = []
+
+    # Ensure the required core is installed (no-op if already present —
+    # cores are normally pre-installed at Docker build time for speed, this
+    # is just a safety net in case a new board is added to the registry
+    # without rebuilding the image yet).
+    install_result = subprocess.run(
+        [ARDUINO_CLI_BIN, "core", "install", core],
+        capture_output=True, text=True, timeout=300
+    )
+    log_lines.append(f"[core install: {core}]\n{install_result.stdout}\n{install_result.stderr}")
+
+    compile_result = subprocess.run(
+        [ARDUINO_CLI_BIN, "compile", "--fqbn", fqbn, sketch_dir, "--export-binaries"],
+        capture_output=True, text=True, timeout=180
+    )
+    log_lines.append(f"[compile --fqbn {fqbn}]\n{compile_result.stdout}\n{compile_result.stderr}")
+
+    if compile_result.returncode != 0:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return False, "", "\n".join(log_lines)
+
+    # arduino-cli exports compiled binaries into a 'build' subfolder
+    build_dir = os.path.join(sketch_dir, "build")
+    binary_path = None
+    if os.path.isdir(build_dir):
+        for root, _, files in os.walk(build_dir):
+            for fname in files:
+                if fname.endswith((".bin", ".hex", ".uf2")):
+                    binary_path = os.path.join(root, fname)
+                    break
+            if binary_path:
+                break
+
+    if not binary_path:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return False, "", "\n".join(log_lines) + "\n[No binary artifact found after compile]"
+
+    return True, binary_path, "\n".join(log_lines)
