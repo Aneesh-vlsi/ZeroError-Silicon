@@ -17,8 +17,15 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Install arduino-cli (free, official install script) ---
-RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh -s -- -b /usr/local/bin
+# --- Install arduino-cli (free, direct pinned-version download) ---
+# Using the install.sh script queries GitHub's API to find the "latest"
+# version, which can get rate-limited on shared cloud build IPs. Downloading
+# a specific release tarball directly avoids that API call entirely.
+RUN curl -fsSL -o /tmp/arduino-cli.tar.gz \
+    https://github.com/arduino/arduino-cli/releases/download/v1.5.1/arduino-cli_1.5.1_Linux_64bit.tar.gz \
+    && tar -xzf /tmp/arduino-cli.tar.gz -C /usr/local/bin arduino-cli \
+    && rm /tmp/arduino-cli.tar.gz \
+    && arduino-cli version
 
 # --- Register free, open-source board package index sources ---
 RUN arduino-cli config init && \
@@ -48,3 +55,6 @@ COPY . .
 EXPOSE 7860
 
 CMD ["python", "app.py"]
+
+
+
