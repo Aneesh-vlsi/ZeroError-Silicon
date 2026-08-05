@@ -2,8 +2,11 @@
 import os
 import random
 import re
+import base64
 from google import genai
 from google.genai import types
+from board_registry import resolve_board
+from compiler import compile_sketch
 
 DEFAULT_BUS_STATUS = "Status: Clean Light-Workspace Active. Dual-Key high-availability failover pipeline active."
 
@@ -64,10 +67,26 @@ def safe_api_call(contents, system_instruction, manual_override_key=""):
             
     return "QUOTA_ERROR: All project credentials channels are exhausted.", "All Keys Exhausted"
 
-def infer_hardware_and_generate_code(board: str, components: str, runtime_key: str) -> tuple[str, str, str]:
+
+def infer_hardware_and_generate_code(board: str, components: str, runtime_key: str) -> tuple[str, str, str, dict]:
+    """Generates AND actually compiles firmware for the requested board.
+
+    Returns (code_text, wiring_diagram, key_used, compile_info) where
+    compile_info is a dict the app layer uses to drive the Flash button:
+        {
+          "compiled": bool,
+          "binary_b64": str,       # base64 binary, empty if not compiled
+          "binary_ext": str,       # "bin" / "hex" / "uf2"
+          "flash_method": str,     # "webserial-esptool" / "webserial-stk500" /
+                                    # "webserial-uf2" / "webusb-dfu" / "download-only"
+          "fqbn": str,
+        }
+    """
     clean_board = board.strip().lower()
-    
+
     restricted_software_terms = ["server", "client", "website", "webpage", "database", "api", "cloud", "application", "app", "ui", "ux", "odometer", "html", "css", "javascript", "my computer", "pc", "laptop"]
+    empty_compile_info = {"compiled": False, "binary_b64": "", "binary_ext": "", "flash_method": "download-only", "fqbn": ""}
+
     if any(term == clean_board for term in restricted_software_terms) or len(clean_board) < 3:
         error_msg = (
             f"// ❌ COMPILATION TERMINATED: TARGET BOUNDARY CRASH\n"
@@ -78,38 +97,95 @@ def infer_hardware_and_generate_code(board: str, components: str, runtime_key: s
             "### ❌ Hardware Compilation Boundary Triggered\n\n"
             f"**Reason:** The token **'{board}'** does not represent a physical micro-controller evaluation board."
         )
-        return error_msg, error_diagram, "No Key Used"
+        return error_msg, error_diagram, "No Key Used", empty_compile_info
 
-    valid_hardware_keywords = ["stm32", "esp32", "esp8266", "arduino", "raspberry", "pico", "atmega", "pic16", "pic18", "msp430", "avr", "teensy", "nordic", "nrf52", "ch32"]
-    is_valid_hardware = any(hw_chip in clean_board for hw_chip in valid_hardware_keywords)
-    
-    if not is_valid_hardware:
+    board_match = resolve_board(board)
+
+    if not board_match:
+        # Honest fallback: this board has no free/open-source Arduino-compatible
+        # core registered yet, so we can't actually compile+flash it. We say so
+        # clearly instead of silently generating code that may not build.
         error_msg = (
-            f"// ❌ COMPILATION REJECTED: INVALID CHIPSET PROFILE\n"
-            f"// Error: '{board}' is not a recognized microcontroller architecture platform.\n"
-            f"// Expected examples: STM32 H743, ESP32 DevKit, Arduino Uno, Raspberry Pi Pico."
+            f"// ⚠️ '{board}' IS NOT YET IN THE FREE COMPILE/FLASH REGISTRY\n"
+            f"// This board has no free, open-source Arduino-compatible core registered in\n"
+            f"// this app yet, so real compilation + one-click flashing can't be offered for it.\n"
+            f"// Recognized families right now: Arduino AVR, ESP32/ESP8266, STM32 (Nucleo/BluePill),\n"
+            f"// Raspberry Pi Pico (RP2040), Nordic nRF52.\n"
+            f"// You can still request AI-generated reference code below, but it will need to be\n"
+            f"// compiled manually with that chip's own vendor toolchain."
         )
-        error_diagram = (
-            "### ❌ Unrecognized Hardware Target Platform\n\n"
-            f"**Reason:** The entry **'{board}'** is not present in our verified embedded board registry."
+        # Still offer best-effort reference code generation, clearly labeled as unverified.
+        code_prompt = f"Target MCU Board: {board}\nRequested Peripherals: {components}\nWrite full operational C/C++ firmware code directly without markdown wrappers. This is reference code only — it has not been compiled or verified."
+        code_instruction = "You are an expert embedded firmware assistant. Output clean C/C++ source code text only. Clearly this is unverified reference code for a board with no available toolchain."
+        raw_code, active_key_used = safe_api_call(code_prompt, code_instruction, runtime_key)
+        clean_code = raw_code.replace("```cpp", "").replace("```c", "").replace("```", "").strip()
+        full_msg = error_msg + "\n\n// ---- UNVERIFIED REFERENCE CODE BELOW ----\n\n" + clean_code
+
+        wiring_prompt = f"Map out explicit pin connections between the board: '{board}' and components: '{components}'. Format as a Markdown comparison table with columns: | {board} Pin | Header Pin Label | Target Device | Target Pin | Assigned Wire Color |"
+        wiring_instruction = "You are a hardware layout engineer. Output markdown connection matrices with bold color tags."
+        raw_wiring, _ = safe_api_call(wiring_prompt, wiring_instruction, runtime_key)
+        clean_wiring = raw_wiring.replace("```text", "").replace("```", "").strip()
+
+        return full_msg, clean_wiring, active_key_used, empty_compile_info
+
+    # --- Board recognized: generate an Arduino-style sketch (setup/loop) ---
+    # This is far more reliable for an LLM to get right than raw register-level
+    # HAL code, and it's exactly the format arduino-cli expects — so the AI's
+    # job is just "write correct application logic", while arduino-cli supplies
+    # the real CMSIS/HAL/clock/linker files for the exact chip automatically.
+    sketch_prompt = (
+        f"Target board: {board} (FQBN: {board_match['fqbn']})\n"
+        f"Requested peripherals/behavior: {components}\n"
+        "Write a complete Arduino-style sketch (setup() and loop() functions) implementing this. "
+        "Use only standard Arduino core functions and widely-available libraries. "
+        "Output raw code only, no markdown fences, no commentary."
+    )
+    sketch_instruction = (
+        "You are an expert embedded firmware engineer writing Arduino-core-compatible sketches. "
+        "Output ONLY valid .ino sketch code (setup/loop style). Never use raw register/HAL calls unless "
+        "no Arduino-core equivalent exists. This code will be compiled for real with arduino-cli, so it "
+        "must be syntactically correct and complete."
+    )
+    raw_sketch, active_key_used = safe_api_call(sketch_prompt, sketch_instruction, runtime_key)
+
+    if "QUOTA_ERROR" in raw_sketch:
+        return raw_sketch, "### ❌ Quota system limit exceeded.", active_key_used, empty_compile_info
+
+    clean_sketch = raw_sketch.replace("```cpp", "").replace("```ino", "").replace("```", "").strip()
+
+    # --- REAL COMPILATION, not just AI output ---
+    success, binary_path, compile_log = compile_sketch(clean_sketch, board_match["fqbn"], board_match["core"])
+
+    if success:
+        with open(binary_path, "rb") as f:
+            binary_bytes = f.read()
+        binary_b64 = base64.b64encode(binary_bytes).decode("ascii")
+        binary_ext = binary_path.rsplit(".", 1)[-1]
+        status_note = f"// ✅ COMPILED SUCCESSFULLY for {board_match['fqbn']}\n// This is a REAL compiled binary, verified by arduino-cli — not just AI-generated text.\n\n"
+        final_code = status_note + clean_sketch
+        compile_info = {
+            "compiled": True,
+            "binary_b64": binary_b64,
+            "binary_ext": binary_ext,
+            "flash_method": board_match["flash_method"],
+            "fqbn": board_match["fqbn"],
+        }
+    else:
+        status_note = (
+            f"// ❌ COMPILATION FAILED for {board_match['fqbn']}\n"
+            f"// The AI-generated sketch did not compile. Build log:\n// "
+            + compile_log.replace("\n", "\n// ") + "\n\n"
         )
-        return error_msg, error_diagram, "No Key Used"
-
-    code_prompt = f"Target MCU Board: {board}\nRequested Peripherals: {components}\nWrite full operational C/C++ firmware code directly without markdown wrappers."
-    code_instruction = "You are an expert embedded firmware validator. Output clean C/C++ source code text only."
-    raw_code, active_key_used = safe_api_call(code_prompt, code_instruction, runtime_key)
-    
-    if "QUOTA_ERROR" in raw_code:
-        return raw_code, "### ❌ Quota system limit exceeded.", active_key_used
-
-    clean_code = raw_code.replace("```cpp", "").replace("```c", "").replace("```", "").strip()
+        final_code = status_note + clean_sketch
+        compile_info = empty_compile_info
 
     wiring_prompt = f"Map out explicit pin connections between the board: '{board}' and components: '{components}'. Format as a Markdown comparison table with columns: | {board} Pin | Header Pin Label | Target Device | Target Pin | Assigned Wire Color |"
     wiring_instruction = "You are a hardware layout engineer. Output markdown connection matrices with bold color tags."
     raw_wiring, _ = safe_api_call(wiring_prompt, wiring_instruction, runtime_key)
     clean_wiring = raw_wiring.replace("```text", "").replace("```", "").strip()
-    
-    return clean_code, clean_wiring, active_key_used
+
+    return final_code, clean_wiring, active_key_used, compile_info
+
 
 def generate_voice_explanation(board: str, components: str, runtime_key: str) -> tuple[str, str]:
     restricted_software_terms = ["server", "client", "website", "webpage", "application", "app", "my computer", "pc"]
@@ -126,13 +202,8 @@ def generate_voice_explanation(board: str, components: str, runtime_key: str) ->
 
 
 # ============================================================
-# SECURE-CONTEXT / PERMISSIONS SAFETY NET
+# SECURE-CONTEXT / PERMISSIONS SAFETY NET (software pipeline)
 # ============================================================
-# Browsers (especially mobile Safari/Chrome) block camera, mic, and
-# geolocation APIs on file:// origins and plain-HTTP non-localhost origins.
-# This guard is injected into every generated app regardless of what the
-# model produced, so users always get a clear explanation instead of a
-# silently broken feature.
 _SECURE_CONTEXT_GUARD_SNIPPET = """
 <script>
 (function() {
@@ -159,24 +230,17 @@ _SECURE_CONTEXT_GUARD_SNIPPET = """
 """
 
 def _inject_secure_context_guard(html_code: str) -> str:
-    """Ensures every generated app has: a mobile viewport meta tag, and the
-    secure-context permission guard, regardless of what the model produced."""
     result = html_code
-
-    # Ensure a mobile-responsive viewport tag exists
     if "viewport" not in result.lower():
         viewport_tag = '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
         if re.search(r"<head[^>]*>", result, re.IGNORECASE):
             result = re.sub(r"(<head[^>]*>)", r"\1\n" + viewport_tag, result, count=1, flags=re.IGNORECASE)
         else:
             result = viewport_tag + result
-
-    # Inject the secure-context guard right after <body> if present, else prepend
     if re.search(r"<body[^>]*>", result, re.IGNORECASE):
         result = re.sub(r"(<body[^>]*>)", r"\1\n" + _SECURE_CONTEXT_GUARD_SNIPPET, result, count=1, flags=re.IGNORECASE)
     else:
         result = _SECURE_CONTEXT_GUARD_SNIPPET + result
-
     return result
 
 
