@@ -3,6 +3,8 @@ import tempfile
 import os
 import re
 import html
+import json
+import gradio as gr
 from config import infer_hardware_and_generate_code, generate_voice_explanation, generate_pure_software_code
 
 def handle_hardware_pipeline(board: str, components: str, runtime_key: str):
@@ -14,28 +16,51 @@ def handle_hardware_pipeline(board: str, components: str, runtime_key: str):
             "### ❌ Missing Input Parameters", 
             "", 
             "The workspace target parameters are currently empty.", 
-            "Status: Aborted due to unpopulated configuration blocks."
+            "Status: Aborted due to unpopulated configuration blocks.",
+            "{}",          # flash_payload_json (empty)
+            gr.update(visible=False),
         )
-        
-    compiled_code, wiring_diagram, key_used = infer_hardware_and_generate_code(board, components, runtime_key)
-    
-    # FIXED: Expands error detection to capture manual token override crashes and quota blocks dynamically
-    if ("COMPILATION REJECTED" in compiled_code or 
-        "COMPILATION TERMINATED" in compiled_code or 
-        "QUOTA_ERROR" in compiled_code or 
-        "crash" in compiled_code or 
-        "EXHAUSTED" in compiled_code):
-        
+
+    compiled_code, wiring_diagram, key_used, compile_info = infer_hardware_and_generate_code(board, components, runtime_key)
+
+    if compile_info.get("compiled"):
         diagnostic_logs = (
             "=== SEQUENTIAL COMPILER LOGS ===\n\n"
             f"• Target Board Profile       : {board}\n"
-            "• Pass 1/3 (Header & Macro Check) : FAILED ❌\n"
-            "• Pass 2/3 (Semantic Driver Audit): ABORTED ⚠️\n"
-            "• Pass 3/3 (Hardware Pin-Mux Traces): ABORTED ⚠️\n"
-            f"╚═  Final Verification: Runtime Pipeline Failed. [{key_used if key_used else 'Error Channel'}]"
+            f"• Resolved FQBN              : {compile_info['fqbn']}\n"
+            "• Pass 1/3 (Header & Macro Check) : Successfully Validated ✔\n"
+            "• Pass 2/3 (Semantic Driver Audit): Successfully Sanitized ✔\n"
+            "• Pass 3/3 (arduino-cli Real Compilation): SUCCESS ✔\n"
+            f"╚═  Final Verification: Real compiled binary produced via {key_used}. Ready to flash."
         )
-        raw_explanation = "The compilation pipeline encountered a structural system or token block error. Process halted."
-        status_bus = f"Status: Error encountered during processing loop."
+        raw_explanation, _ = generate_voice_explanation(board, components, runtime_key)
+        status_bus = f"Status: Compiled successfully for {compile_info['fqbn']} [{key_used} Active]."
+        flash_payload = json.dumps({
+            "binary_b64": compile_info["binary_b64"],
+            "binary_ext": compile_info["binary_ext"],
+            "flash_method": compile_info["flash_method"],
+            "fqbn": compile_info["fqbn"],
+        })
+        flash_visible = gr.update(visible=(compile_info["flash_method"] != "download-only"))
+    elif ("COMPILATION REJECTED" in compiled_code or
+          "COMPILATION TERMINATED" in compiled_code or
+          "QUOTA_ERROR" in compiled_code or
+          "crash" in compiled_code or
+          "EXHAUSTED" in compiled_code or
+          "COMPILATION FAILED" in compiled_code or
+          "NOT YET IN THE FREE COMPILE" in compiled_code):
+        diagnostic_logs = (
+            "=== SEQUENTIAL COMPILER LOGS ===\n\n"
+            f"• Target Board Profile       : {board}\n"
+            "• Pass 1/3 (Header & Macro Check) : See log below ⚠️\n"
+            "• Pass 2/3 (Semantic Driver Audit): ABORTED ⚠️\n"
+            "• Pass 3/3 (Real arduino-cli Compilation): NOT COMPLETED ⚠️\n"
+            f"╚═  Final Verification: Could not produce a verified flashable binary. [{key_used if key_used else 'Error Channel'}]"
+        )
+        raw_explanation = "The compilation pipeline could not produce a verified binary for this board. See the diagnostics panel for the exact reason."
+        status_bus = f"Status: Compilation not completed for '{board}'."
+        flash_payload = "{}"
+        flash_visible = gr.update(visible=False)
     else:
         diagnostic_logs = (
             "=== SEQUENTIAL COMPILER LOGS ===\n\n"
@@ -47,9 +72,11 @@ def handle_hardware_pipeline(board: str, components: str, runtime_key: str):
         )
         raw_explanation, _ = generate_voice_explanation(board, components, runtime_key)
         status_bus = f"Status: Process executed successfully [{key_used} Active]."
-    
+        flash_payload = "{}"
+        flash_visible = gr.update(visible=False)
+
     clean_voice_cache = re.sub(r'[#\*\[\]\(\)\{\}\-\+\=\_\/\\\:\;\<\>\`\|]', ' ', raw_explanation).strip()
-    return diagnostic_logs, compiled_code, wiring_diagram, compiled_code, clean_voice_cache, status_bus
+    return diagnostic_logs, compiled_code, wiring_diagram, compiled_code, clean_voice_cache, status_bus, flash_payload, flash_visible
 
 
 def handle_software_pipeline(language: str, prompt: str, runtime_key: str):
@@ -71,11 +98,6 @@ def handle_software_pipeline(language: str, prompt: str, runtime_key: str):
 
     compiled_software, key_used = generate_pure_software_code(language, prompt, runtime_key)
 
-    # Render the generated app inside its own sandboxed iframe so its full-page
-    # CSS/JS (dark themes, absolute positioning, fixed badges, etc.) doesn't
-    # collide with the host Gradio page's styles — and vice versa. This fixes
-    # the overlapping elements, hidden download button, and low-contrast text
-    # that happened when the generated HTML was injected directly into the page.
     safe_html = html.escape(compiled_software, quote=True)
     preview_html = (
         f'<iframe srcdoc="{safe_html}" '
@@ -88,7 +110,4 @@ def handle_software_pipeline(language: str, prompt: str, runtime_key: str):
     clean_voice_cache = re.sub(r'[#\*\[\]\(\)\{\}\-\+\=\_\/\\\:\;\<\>\`\|]', ' ', raw_explanation).strip()
 
     status_bus = f"Status: Application asset assembled safely [{key_used} Active]."
-    # Note: preview_html goes to the on-page preview; compiled_software (the
-    # raw, unmodified code) still goes to the download cache so the exported
-    # file is exactly what was generated, with no iframe wrapper baked in.
     return diagnostic_logs, preview_html, compiled_software, clean_voice_cache, status_bus
