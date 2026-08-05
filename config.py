@@ -3,12 +3,20 @@ import os
 import random
 import re
 import base64
+import concurrent.futures
 from google import genai
 from google.genai import types
 from board_registry import resolve_board
 from compiler import compile_sketch
 
 DEFAULT_BUS_STATUS = "Status: Clean Light-Workspace Active. Dual-Key high-availability failover pipeline active."
+
+# How long (seconds) to wait on ANY single Gemini API attempt before giving up
+# and moving to the next key. This is enforced with a real Python-level
+# timeout (via a worker thread), not just the SDK's own timeout setting —
+# there are known bugs in google-genai where its internal timeout doesn't
+# reliably stop a stalled request, so relying on it alone can hang forever.
+PER_ATTEMPT_TIMEOUT_SECONDS = 30
 
 # 🔑 SECURE PRODUCTION KEY MATRIX: Dynamically reads from Render's Environment Secrets Panel
 API_KEY_POOL = [
@@ -27,44 +35,55 @@ API_KEY_POOL = [
 # Filter out empty or unconfigured variable placeholders
 API_KEY_POOL = [key for key in API_KEY_POOL if key.strip()]
 
+
+def _call_with_hard_timeout(api_key: str, contents, system_instruction: str, timeout_seconds: int):
+    """Runs a single Gemini call in a worker thread and forcibly gives up
+    after `timeout_seconds`, regardless of what the SDK itself does. Raises
+    TimeoutError if it doesn't finish in time; the worker thread itself may
+    keep running in the background until the process exits, but the caller
+    is freed immediately to move on to the next key."""
+    def _do_call():
+        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_seconds * 1000))
+        return client.models.generate_content(
+            model='gemini-3.5-flash',
+            contents=contents,
+            config=types.GenerateContentConfig(system_instruction=system_instruction)
+        ).text
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_do_call)
+        return future.result(timeout=timeout_seconds)  # raises concurrent.futures.TimeoutError if too slow
+
+
 def safe_api_call(contents, system_instruction, manual_override_key=""):
-    TARGET_MODEL = 'gemini-3.5-flash'
-    
     clean_override = str(manual_override_key).strip() if manual_override_key else ""
     if clean_override and len(clean_override) > 10:
         try:
-            client = genai.Client(api_key=clean_override)
-            response_text = client.models.generate_content(
-                model=TARGET_MODEL, 
-                contents=contents, 
-                config=types.GenerateContentConfig(system_instruction=system_instruction)
-            ).text
+            response_text = _call_with_hard_timeout(clean_override, contents, system_instruction, PER_ATTEMPT_TIMEOUT_SECONDS)
             return response_text, "Manual Override Key"
+        except concurrent.futures.TimeoutError:
+            return f"// manual override timed out after {PER_ATTEMPT_TIMEOUT_SECONDS}s — the key may be rate-limited or the network is slow", "Manual Override Timed Out"
         except Exception as e:
             return f"// manual override validation crash: {str(e)}", "Manual Override Failed Check"
 
     # Fallback backup pool rotation strategy if no manual key is typed
     shuffled_pool = list(API_KEY_POOL)
     random.shuffle(shuffled_pool)
-    
+
     if not shuffled_pool:
         return "QUOTA_ERROR: No background system API keys are configured in Render environment variables.", "Keys Missing"
-    
+
     for active_key in shuffled_pool:
         key_label = "System Rotated Key"
         try:
-            client = genai.Client(api_key=str(active_key).strip())
-            response_text = client.models.generate_content(
-                model=TARGET_MODEL, 
-                contents=contents, 
-                config=types.GenerateContentConfig(system_instruction=system_instruction)
-            ).text
-            
+            response_text = _call_with_hard_timeout(str(active_key).strip(), contents, system_instruction, PER_ATTEMPT_TIMEOUT_SECONDS)
             if response_text and "QUOTA_ERROR" not in response_text:
                 return response_text, key_label
+        except concurrent.futures.TimeoutError:
+            continue  # this key stalled — move on to the next one immediately
         except Exception:
             continue
-            
+
     return "QUOTA_ERROR: All project credentials channels are exhausted.", "All Keys Exhausted"
 
 
