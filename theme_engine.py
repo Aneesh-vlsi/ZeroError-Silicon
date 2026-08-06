@@ -7,9 +7,7 @@ force_light_mode_js = """
 }
 """
 
-# Premium custom login card layout configurations
 login_wall_css = """
-/* Smooth subtle grid pattern background for the login wall */
 .gradio-container-auth {
     background-color: #f1f5f9 !important;
     background-image: radial-gradient(#e2e8f0 1.5px, transparent 1.5px) !important;
@@ -21,7 +19,6 @@ login_wall_css = """
     padding: 20px !important;
 }
 
-/* Elevate the default login card surface wrapper box */
 .gradio-container-auth > div:first-child {
     border: 1px solid #e2e8f0 !important;
     background: #ffffff !important;
@@ -32,7 +29,6 @@ login_wall_css = """
     width: 100% !important;
 }
 
-/* Clean typography styling rules for the headings */
 .gradio-container-auth h2 {
     font-size: 24px !important;
     font-weight: 700 !important;
@@ -42,7 +38,6 @@ login_wall_css = """
     text-align: center !important;
 }
 
-/* Subtitle message descriptive text */
 .gradio-container-auth p {
     color: #64748b !important;
     font-size: 14px !important;
@@ -50,7 +45,6 @@ login_wall_css = """
     text-align: center !important;
 }
 
-/* Modernize input boundary boxes */
 .gradio-container-auth input[type="text"], 
 .gradio-container-auth input[type="password"] {
     border: 1px solid #cbd5e1 !important;
@@ -60,13 +54,11 @@ login_wall_css = """
     transition: all 0.2s ease !important;
 }
 
-/* Active focus transition ring mapping for login fields */
 .gradio-container-auth input:focus {
     border-color: #f97316 !important;
     box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15) !important;
 }
 
-/* Primary login interactive submission button block */
 .gradio-container-auth button {
     background-color: #f97316 !important;
     border: none !important;
@@ -100,11 +92,10 @@ theme_engine_js = """
 (theme_name) => {
     document.documentElement.classList.remove('dark');
     document.body.classList.remove('dark');
-    
+
     let oldStyleBlock = document.getElementById("arro-custom-theme-layer");
     if (oldStyleBlock) { oldStyleBlock.remove(); }
-    
-    // Inject and cache the global HTML5 loading audio player container
+
     let dynamicAudioNode = document.getElementById("arro-loading-sfx-node");
     if (!dynamicAudioNode) {
         dynamicAudioNode = document.createElement("audio");
@@ -114,7 +105,7 @@ theme_engine_js = """
         dynamicAudioNode.volume = 0.5; 
         document.body.appendChild(dynamicAudioNode);
     }
-    
+
     let primaryColor = "#f97316"; 
     let primaryHover = "#ea580c";
     let primarySoft = "rgba(249, 115, 22, 0.10)";
@@ -123,7 +114,7 @@ theme_engine_js = """
     let borderColor = "#cbd5e1";
     let labelColor = "#334155";
     let loaderColor = "#0284c7";
-    
+
     if (theme_name.includes("Ocean")) {
         primaryColor = "#0284c7"; primaryHover = "#0369a1"; primarySoft = "rgba(2, 132, 199, 0.10)"; blockBg = "#f0f9ff"; bodyBg = "#e0f2fe"; borderColor = "#bae6fd"; labelColor = "#0369a1"; loaderColor = "#0284c7";
     } else if (theme_name.includes("Forest")) {
@@ -133,7 +124,7 @@ theme_engine_js = """
     } else if (theme_name.includes("Steel")) {
         primaryColor = "#4b5563"; primaryHover = "#374151"; primarySoft = "rgba(75, 85, 99, 0.10)"; blockBg = "#f9fafb"; bodyBg = "#f3f4f6"; borderColor = "#e5e7eb"; labelColor = "#1f2937"; loaderColor = "#4b5563";
     }
-    
+
     let cssRules = `
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
@@ -148,33 +139,27 @@ theme_engine_js = """
         button.primary { background-color: ${primaryColor} !important; border-color: ${primaryColor} !important; color: white !important; }
         button.primary:hover { background-color: ${primaryHover} !important; }
 
-        /* ========================================================
-           CROSS-PLATFORM AUTOMATIC ADAPTIVE LAYOUT
-           ======================================================== */
         @media (max-width: 768px) {
             .form, [class*="gr-row"] {
                 flex-direction: column !important;
                 gap: 12px !important;
             }
-            
+
             div[style*="flex-grow"], .block {
                 flex-grow: 1 !important;
                 width: 100% !important;
                 max-width: 100% !important;
             }
-            
+
             input, textarea, select {
                 font-size: 14px !important;
             }
         }
 
-        /* ========================================================
-           CUSTOM LOADING SYMBOL OVERRIDE MATRIX
-           ======================================================== */
         div[class*="loading"] svg, .wrap[class*="loading"] svg, .generating svg {
             display: none !important;
         }
-        
+
         div[class*="loading"]::after, .wrap[class*="loading"]::after, .generating::after {
             content: "" !important;
             display: inline-block !important;
@@ -196,20 +181,12 @@ theme_engine_js = """
             to { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
-        /* ========================================================
-           MODERN UI REFRESH — visual polish only, no structural
-           or behavioral changes. Every element keeps its original
-           id/class and click bindings; only appearance is altered.
-           ======================================================== */
-
-        /* --- Page container breathing room --- */
         .gradio-container {
             max-width: 1200px !important;
             margin: 0 auto !important;
             padding: 24px 20px 48px 20px !important;
         }
 
-        /* --- Header bar: cleaner, with soft divider and spacing --- */
         #header-bar-container {
             padding: 20px 24px !important;
             margin-bottom: 20px !important;
@@ -225,7 +202,6 @@ theme_engine_js = """
             margin: 0 !important;
         }
 
-        /* --- Cards: every gr-group / gr-box / gr-form gets a soft elevated look --- */
         .gr-group, .gr-box, .gr-form, .block {
             border-radius: 14px !important;
             box-shadow: 0 1px 2px rgba(0,0,0,0.03) !important;
@@ -233,7 +209,6 @@ theme_engine_js = """
             transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
         }
 
-        /* --- Inputs: rounder, cleaner focus ring using theme color --- */
         input, textarea, select {
             border-radius: 10px !important;
             transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
@@ -243,7 +218,6 @@ theme_engine_js = """
             box-shadow: 0 0 0 3px ${primarySoft} !important;
         }
 
-        /* --- Buttons: consistent rounding, weight, subtle lift on hover --- */
         button {
             border-radius: 10px !important;
             font-weight: 600 !important;
@@ -265,7 +239,6 @@ theme_engine_js = """
             transform: translateY(0) !important;
         }
 
-        /* --- Tabs: pill-style active indicator instead of plain underline --- */
         .tabs > .tab-nav {
             gap: 6px !important;
             border-bottom: 1px solid ${borderColor} !important;
@@ -285,12 +258,10 @@ theme_engine_js = """
             border-bottom: 2px solid ${primaryColor} !important;
         }
 
-        /* --- Code / log output panels: monospace clarity --- */
         .gr-code, textarea[class*="scroll"], pre {
             border-radius: 10px !important;
         }
 
-        /* --- Dropdowns: match input polish --- */
         .gr-dropdown, select {
             border-radius: 10px !important;
         }
@@ -311,7 +282,7 @@ theme_engine_js = """
             }
         }
     `;
-    
+
     let styleElement = document.createElement("style");
     styleElement.id = "arro-custom-theme-layer";
     styleElement.innerHTML = cssRules;
