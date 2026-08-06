@@ -53,8 +53,12 @@ def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, s
 
         # Free-tier cloud CPUs are slow — give the compiler generous room
         # (5 minutes) rather than risk an uncaught timeout mid-compile.
+        # --build-cache-path reuses compiled core object files across
+        # requests (and across the Docker build's cache-warming step below),
+        # so only the FIRST-EVER compile of a given board is genuinely slow.
         compile_result = subprocess.run(
-            [ARDUINO_CLI_BIN, "compile", "--fqbn", fqbn, sketch_dir, "--export-binaries"],
+            [ARDUINO_CLI_BIN, "compile", "--fqbn", fqbn, sketch_dir,
+             "--export-binaries", "--build-cache-path", "/opt/arduino-cache"],
             capture_output=True, text=True, timeout=300
         )
         log_lines.append(f"[compile --fqbn {fqbn}]\n{compile_result.stdout}\n{compile_result.stderr}")
