@@ -1,22 +1,21 @@
+# app_logic.py
 import tempfile
 import os
 import re
 import html
 import json
-import traceback
 import gradio as gr
 from config import infer_hardware_and_generate_code, generate_voice_explanation, generate_pure_software_code
-
 
 def handle_hardware_pipeline(board: str, components: str, runtime_key: str):
     """Handles physical firmware validation pipelines, executing strict target board guards."""
     if not board.strip() or not components.strip():
         return (
             "=== COMPILATION REJECTED ===\n\nError: Microcontroller target input fields cannot be left blank.",
-            "// ERROR: MISSING REQUIREMENTS PARAMETERS",
-            "### ❌ Missing Input Parameters",
-            "",
-            "The workspace target parameters are currently empty.",
+            "// ERROR: MISSING REQUIREMENTS PARAMETERS", 
+            "### ❌ Missing Input Parameters", 
+            "", 
+            "The workspace target parameters are currently empty.", 
             "Status: Aborted due to unpopulated configuration blocks.",
             "{}",          # flash_payload_json (empty)
             gr.update(visible=False),
@@ -27,16 +26,10 @@ def handle_hardware_pipeline(board: str, components: str, runtime_key: str):
     except Exception as e:
         # Safety net: never let an unhandled exception surface as Gradio's
         # bare "Error" bubble — always return a readable diagnostic instead.
-        # Print the FULL traceback (not just str(e)) so the Render service
-        # logs show the exact file/line that failed.
-        print("=== handle_hardware_pipeline: UNCAUGHT EXCEPTION ===")
-        traceback.print_exc()
-
         error_log = (
             "=== SEQUENTIAL COMPILER LOGS ===\n\n"
             f"• Target Board Profile       : {board}\n"
-            f"╚═  Unexpected pipeline error: {type(e).__name__}: {str(e)}\n\n"
-            "(Full traceback has been written to the server logs.)"
+            f"╚═  Unexpected pipeline error: {type(e).__name__}: {str(e)}"
         )
         return (
             error_log,
@@ -86,8 +79,7 @@ def _run_hardware_pipeline(board: str, components: str, runtime_key: str):
             "• Pass 1/3 (Header & Macro Check) : See log below ⚠️\n"
             "• Pass 2/3 (Semantic Driver Audit): ABORTED ⚠️\n"
             "• Pass 3/3 (Real arduino-cli Compilation): NOT COMPLETED ⚠️\n"
-            f"╚═  Final Verification: Could not produce a verified flashable binary. [{key_used if key_used else 'Error Channel'}]\n\n"
-            f"{compiled_code}"
+            f"╚═  Final Verification: Could not produce a verified flashable binary. [{key_used if key_used else 'Error Channel'}]"
         )
         raw_explanation = "The compilation pipeline could not produce a verified binary for this board. See the diagnostics panel for the exact reason."
         status_bus = f"Status: Compilation not completed for '{board}'."
@@ -125,11 +117,8 @@ def handle_software_pipeline(language: str, prompt: str, runtime_key: str):
     try:
         return _run_software_pipeline(language, prompt, runtime_key)
     except Exception as e:
-        print("=== handle_software_pipeline: UNCAUGHT EXCEPTION ===")
-        traceback.print_exc()
-
         return (
-            f"=== APPLICATION LAYER DIAGNOSTICS ===\n\n╚═  Unexpected error: {type(e).__name__}: {str(e)}\n\n(Full traceback written to server logs.)",
+            f"=== APPLICATION LAYER DIAGNOSTICS ===\n\n╚═  Unexpected error: {type(e).__name__}: {str(e)}",
             f"<p style='padding:20px;color:#991b1b;'>⚠️ Unexpected error: {html.escape(str(e))}</p>",
             "",
             "Something went wrong generating this app. Please check the diagnostics panel.",
@@ -154,7 +143,7 @@ def _run_software_pipeline(language: str, prompt: str, runtime_key: str):
         'sandbox="allow-scripts allow-same-origin allow-forms"></iframe>'
     )
 
-    raw_explanation = "Verification absolute. This source asset completely implements the code needed to satisfy your logic guidelines."
+    raw_explanation = f"Verification absolute. This source asset completely implements the code needed to satisfy your logic guidelines."
     clean_voice_cache = re.sub(r'[#\*\[\]\(\)\{\}\-\+\=\_\/\\\:\;\<\>\`\|]', ' ', raw_explanation).strip()
 
     status_bus = f"Status: Application asset assembled safely [{key_used} Active]."
