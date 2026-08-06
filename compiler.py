@@ -22,40 +22,52 @@ def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, s
     """Compiles `sketch_code` for the given FQBN using arduino-cli.
 
     Returns (success, binary_path_or_empty, log_output).
-    The caller is responsible for deleting the returned binary's parent
-    temp directory once it's been read/sent to the client.
+    Never raises — any failure (timeout, missing binary, compile error) is
+    caught and returned as a readable log message instead of crashing the
+    Gradio callback (which would otherwise show a bare, unhelpful "Error").
     """
     workdir = tempfile.mkdtemp(prefix="zes_sketch_")
     sketch_dir = os.path.join(workdir, "sketch")
     os.makedirs(sketch_dir, exist_ok=True)
 
-    # arduino-cli requires the .ino file to share its parent folder's name
     sketch_path = os.path.join(sketch_dir, "sketch.ino")
     with open(sketch_path, "w") as f:
         f.write(sketch_code)
 
     log_lines = []
 
-    # Only install the core if it's not already present (cores are normally
-    # pre-installed at Docker build time). Checking first avoids an
-    # unnecessary network call on every single compile request.
-    list_result = subprocess.run(
-        [ARDUINO_CLI_BIN, "core", "list"], capture_output=True, text=True, timeout=30
-    )
-    if core not in list_result.stdout:
-        install_result = subprocess.run(
-            [ARDUINO_CLI_BIN, "core", "install", core],
+    try:
+        # Only install the core if it's not already present (cores are
+        # normally pre-installed at Docker build time).
+        list_result = subprocess.run(
+            [ARDUINO_CLI_BIN, "core", "list"], capture_output=True, text=True, timeout=30
+        )
+        if core not in list_result.stdout:
+            install_result = subprocess.run(
+                [ARDUINO_CLI_BIN, "core", "install", core],
+                capture_output=True, text=True, timeout=300
+            )
+            log_lines.append(f"[core install: {core}]\n{install_result.stdout}\n{install_result.stderr}")
+        else:
+            log_lines.append(f"[core already installed: {core}]")
+
+        # Free-tier cloud CPUs are slow — give the compiler generous room
+        # (5 minutes) rather than risk an uncaught timeout mid-compile.
+        compile_result = subprocess.run(
+            [ARDUINO_CLI_BIN, "compile", "--fqbn", fqbn, sketch_dir, "--export-binaries"],
             capture_output=True, text=True, timeout=300
         )
-        log_lines.append(f"[core install: {core}]\n{install_result.stdout}\n{install_result.stderr}")
-    else:
-        log_lines.append(f"[core already installed: {core}]")
+        log_lines.append(f"[compile --fqbn {fqbn}]\n{compile_result.stdout}\n{compile_result.stderr}")
 
-    compile_result = subprocess.run(
-        [ARDUINO_CLI_BIN, "compile", "--fqbn", fqbn, sketch_dir, "--export-binaries"],
-        capture_output=True, text=True, timeout=180
-    )
-    log_lines.append(f"[compile --fqbn {fqbn}]\n{compile_result.stdout}\n{compile_result.stderr}")
+    except FileNotFoundError:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return False, "", "\n".join(log_lines) + "\n[arduino-cli binary not found on PATH — check the Dockerfile install step]"
+    except subprocess.TimeoutExpired as e:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return False, "", "\n".join(log_lines) + f"\n[Timed out after {e.timeout}s — the free-tier CPU may be too slow for this compile, try again or upgrade the instance]"
+    except Exception as e:
+        shutil.rmtree(workdir, ignore_errors=True)
+        return False, "", "\n".join(log_lines) + f"\n[Unexpected error during compile: {type(e).__name__}: {str(e)}]"
 
     if compile_result.returncode != 0:
         shutil.rmtree(workdir, ignore_errors=True)
