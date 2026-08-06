@@ -2,7 +2,6 @@
 # This replaces Render's automatic Python buildpack with a container that
 # also has arduino-cli + board cores installed — needed for the real
 # compile/flash pipeline.
-
 FROM python:3.11-slim
 
 # --- System dependencies ---
@@ -59,12 +58,9 @@ RUN mkdir -p /tmp/warm-sketch && \
 
 # --- Set up the Python app ---
 WORKDIR /app
-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY . .
 
 EXPOSE 7860
-
 CMD ["python", "app.py"]
