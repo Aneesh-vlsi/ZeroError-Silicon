@@ -1,22 +1,14 @@
-# config.py
 import os
 import random
 import re
 import base64
-import concurrent.futures
+import traceback
 from google import genai
 from google.genai import types
 from board_registry import resolve_board
 from compiler import compile_sketch
 
 DEFAULT_BUS_STATUS = "Status: Clean Light-Workspace Active. Dual-Key high-availability failover pipeline active."
-
-# How long (seconds) to wait on ANY single Gemini API attempt before giving up
-# and moving to the next key. This is enforced with a real Python-level
-# timeout (via a worker thread), not just the SDK's own timeout setting —
-# there are known bugs in google-genai where its internal timeout doesn't
-# reliably stop a stalled request, so relying on it alone can hang forever.
-PER_ATTEMPT_TIMEOUT_SECONDS = 30
 
 # 🔑 SECURE PRODUCTION KEY MATRIX: Dynamically reads from Render's Environment Secrets Panel
 API_KEY_POOL = [
@@ -35,35 +27,52 @@ API_KEY_POOL = [
 # Filter out empty or unconfigured variable placeholders
 API_KEY_POOL = [key for key in API_KEY_POOL if key.strip()]
 
+# ------------------------------------------------------------------
+# FIX: 'gemini-3.5-flash' is not a real published Gemini model ID.
+# Every generate_content call against it will raise an exception, which
+# used to mean *every* key in the pool would fail for the same reason
+# ("model not found") and the whole pipeline would report QUOTA_ERROR /
+# crash — even with valid, working API keys.
+#
+# Fix: try a short list of real, current model IDs in order, and only
+# move to the next API key once all model IDs have been tried against it.
+# This also gives graceful degradation if Google deprecates one model.
+# ------------------------------------------------------------------
+CANDIDATE_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+]
 
-def _call_with_hard_timeout(api_key: str, contents, system_instruction: str, timeout_seconds: int):
-    """Runs a single Gemini call in a worker thread and forcibly gives up
-    after `timeout_seconds`, regardless of what the SDK itself does. Raises
-    TimeoutError if it doesn't finish in time; the worker thread itself may
-    keep running in the background until the process exits, but the caller
-    is freed immediately to move on to the next key."""
-    def _do_call():
-        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_seconds * 1000))
-        return client.models.generate_content(
-            model='gemini-3.5-flash',
-            contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction)
-        ).text
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_do_call)
-        return future.result(timeout=timeout_seconds)  # raises concurrent.futures.TimeoutError if too slow
+def _try_generate(client, contents, system_instruction):
+    """Try each candidate model in order against a single client. Returns
+    (text, model_used) on success, raises the last exception on total failure."""
+    last_exc = None
+    for model_name in CANDIDATE_MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=system_instruction)
+            )
+            return response.text, model_name
+        except Exception as e:
+            last_exc = e
+            continue
+    raise last_exc if last_exc else RuntimeError("No candidate models were attempted.")
 
 
 def safe_api_call(contents, system_instruction, manual_override_key=""):
     clean_override = str(manual_override_key).strip() if manual_override_key else ""
     if clean_override and len(clean_override) > 10:
         try:
-            response_text = _call_with_hard_timeout(clean_override, contents, system_instruction, PER_ATTEMPT_TIMEOUT_SECONDS)
-            return response_text, "Manual Override Key"
-        except concurrent.futures.TimeoutError:
-            return f"// manual override timed out after {PER_ATTEMPT_TIMEOUT_SECONDS}s — the key may be rate-limited or the network is slow", "Manual Override Timed Out"
+            client = genai.Client(api_key=clean_override)
+            response_text, model_used = _try_generate(client, contents, system_instruction)
+            return response_text, f"Manual Override Key ({model_used})"
         except Exception as e:
+            print("=== safe_api_call: manual override key failed ===")
+            traceback.print_exc()
             return f"// manual override validation crash: {str(e)}", "Manual Override Failed Check"
 
     # Fallback backup pool rotation strategy if no manual key is typed
@@ -73,18 +82,24 @@ def safe_api_call(contents, system_instruction, manual_override_key=""):
     if not shuffled_pool:
         return "QUOTA_ERROR: No background system API keys are configured in Render environment variables.", "Keys Missing"
 
+    last_error = None
     for active_key in shuffled_pool:
-        key_label = "System Rotated Key"
         try:
-            response_text = _call_with_hard_timeout(str(active_key).strip(), contents, system_instruction, PER_ATTEMPT_TIMEOUT_SECONDS)
+            client = genai.Client(api_key=str(active_key).strip())
+            response_text, model_used = _try_generate(client, contents, system_instruction)
+
             if response_text and "QUOTA_ERROR" not in response_text:
-                return response_text, key_label
-        except concurrent.futures.TimeoutError:
-            continue  # this key stalled — move on to the next one immediately
-        except Exception:
+                return response_text, f"System Rotated Key ({model_used})"
+        except Exception as e:
+            last_error = e
+            # Log the real cause to stdout/stderr so it shows up in Render
+            # logs — silently swallowing this is what made past failures
+            # look like a generic "Error" bubble with no clue why.
+            print(f"=== safe_api_call: key failed ({type(e).__name__}): {e} ===")
             continue
 
-    return "QUOTA_ERROR: All project credentials channels are exhausted.", "All Keys Exhausted"
+    detail = f" Last error: {type(last_error).__name__}: {last_error}" if last_error else ""
+    return f"QUOTA_ERROR: All project credentials channels are exhausted.{detail}", "All Keys Exhausted"
 
 
 def infer_hardware_and_generate_code(board: str, components: str, runtime_key: str) -> tuple[str, str, str, dict]:
@@ -210,7 +225,7 @@ def generate_voice_explanation(board: str, components: str, runtime_key: str) ->
     restricted_software_terms = ["server", "client", "website", "webpage", "application", "app", "my computer", "pc"]
     if board.strip().lower() in restricted_software_terms:
         return "Let's pause and check this setup together. It looks like the target selected isn't an embedded board.", "No Key Used"
-        
+
     system_instruction = (
         "You are an incredibly patient, warm, and highly empathetic hardware engineering mentor. "
         "Speak in an encouraging, slow, steady, reassuring tone like a helpful peer. "
@@ -247,6 +262,7 @@ _SECURE_CONTEXT_GUARD_SNIPPET = """
 })();
 </script>
 """
+
 
 def _inject_secure_context_guard(html_code: str) -> str:
     result = html_code
