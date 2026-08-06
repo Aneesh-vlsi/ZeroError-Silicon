@@ -28,20 +28,24 @@ API_KEY_POOL = [
 API_KEY_POOL = [key for key in API_KEY_POOL if key.strip()]
 
 # ------------------------------------------------------------------
-# FIX: 'gemini-3.5-flash' is not a real published Gemini model ID.
-# Every generate_content call against it will raise an exception, which
-# used to mean *every* key in the pool would fail for the same reason
-# ("model not found") and the whole pipeline would report QUOTA_ERROR /
-# crash — even with valid, working API keys.
+# Google retires Gemini model IDs on a rolling basis — as of this writing:
+#   - gemini-1.5-flash : SHUT DOWN (fully removed, always 404s)
+#   - gemini-2.0-flash : SHUT DOWN June 1, 2026
+#   - gemini-2.5-flash : still live, but scheduled to shut down Oct 16, 2026
+#   - gemini-3.5-flash / gemini-3.6-flash : current generation, live, no
+#     shutdown date announced
 #
-# Fix: try a short list of real, current model IDs in order, and only
-# move to the next API key once all model IDs have been tried against it.
-# This also gives graceful degradation if Google deprecates one model.
+# Rather than hardcode one ID that will inevitably go stale again, we try
+# a short list of currently-live models in order (newest-first), and only
+# move to the next API key once every model ID has been tried against it.
+# When Google deprecates one of these, just drop/replace the entry here —
+# check https://ai.google.dev/gemini-api/docs/deprecations for the current
+# list rather than assuming.
 # ------------------------------------------------------------------
 CANDIDATE_MODELS = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
     "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
 ]
 
 
