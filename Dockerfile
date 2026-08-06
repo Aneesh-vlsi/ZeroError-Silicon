@@ -45,6 +45,18 @@ RUN arduino-cli core update-index && \
     arduino-cli core install rp2040:rp2040 && \
     arduino-cli core install adafruit:nrf52
 
+# --- Pre-warm the build cache for the most common boards ---
+# The FIRST compile for any given board is always slow because it has to
+# compile the whole core library, not just the sketch. Doing that once here,
+# at build time, means real users hitting the most common boards get a fast
+# compile immediately — the slow part already happened during deployment.
+RUN mkdir -p /tmp/warm-sketch && \
+    echo "void setup() {} void loop() {}" > /tmp/warm-sketch/warm-sketch.ino && \
+    arduino-cli compile --fqbn arduino:avr:uno /tmp/warm-sketch --build-cache-path /opt/arduino-cache || true && \
+    arduino-cli compile --fqbn esp32:esp32:esp32 /tmp/warm-sketch --build-cache-path /opt/arduino-cache || true && \
+    arduino-cli compile --fqbn esp8266:esp8266:generic /tmp/warm-sketch --build-cache-path /opt/arduino-cache || true && \
+    rm -rf /tmp/warm-sketch
+
 # --- Set up the Python app ---
 WORKDIR /app
 
@@ -56,6 +68,3 @@ COPY . .
 EXPOSE 7860
 
 CMD ["python", "app.py"]
-
-
-
