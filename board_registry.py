@@ -4,7 +4,7 @@
 # to the exact `arduino-cli` FQBN (Fully Qualified Board Name) and the core
 # package that must be installed to compile for it. Every core listed here
 # is free and open-source, installed once at Docker build time (see the
-# Dockerfile), so there is no per-request cost or paid dependency.
+# Dockerfile snippet), so there is no per-request cost or paid dependency.
 #
 # HOW TO EXTEND: to support a new board, add one entry. If the board has an
 # official or community Arduino core, this is usually all that's needed —
