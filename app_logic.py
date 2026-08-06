@@ -21,6 +21,30 @@ def handle_hardware_pipeline(board: str, components: str, runtime_key: str):
             gr.update(visible=False),
         )
 
+    try:
+        return _run_hardware_pipeline(board, components, runtime_key)
+    except Exception as e:
+        # Safety net: never let an unhandled exception surface as Gradio's
+        # bare "Error" bubble — always return a readable diagnostic instead.
+        error_log = (
+            "=== SEQUENTIAL COMPILER LOGS ===\n\n"
+            f"• Target Board Profile       : {board}\n"
+            f"╚═  Unexpected pipeline error: {type(e).__name__}: {str(e)}"
+        )
+        return (
+            error_log,
+            f"// ❌ UNEXPECTED ERROR: {type(e).__name__}: {str(e)}",
+            "### ❌ Pipeline crashed unexpectedly — see diagnostics log",
+            "",
+            "Something went wrong while compiling. Please check the diagnostics panel.",
+            f"Status: Unexpected error — {type(e).__name__}",
+            "{}",
+            gr.update(visible=False),
+        )
+
+
+def _run_hardware_pipeline(board: str, components: str, runtime_key: str):
+
     compiled_code, wiring_diagram, key_used, compile_info = infer_hardware_and_generate_code(board, components, runtime_key)
 
     if compile_info.get("compiled"):
@@ -90,6 +114,19 @@ def handle_software_pipeline(language: str, prompt: str, runtime_key: str):
             "Status: Aborted due to missing functional requirements."
         )
 
+    try:
+        return _run_software_pipeline(language, prompt, runtime_key)
+    except Exception as e:
+        return (
+            f"=== APPLICATION LAYER DIAGNOSTICS ===\n\n╚═  Unexpected error: {type(e).__name__}: {str(e)}",
+            f"<p style='padding:20px;color:#991b1b;'>⚠️ Unexpected error: {html.escape(str(e))}</p>",
+            "",
+            "Something went wrong generating this app. Please check the diagnostics panel.",
+            f"Status: Unexpected error — {type(e).__name__}",
+        )
+
+
+def _run_software_pipeline(language: str, prompt: str, runtime_key: str):
     diagnostic_logs = (
         "=== APPLICATION LAYER DIAGNOSTICS ===\n\n"
         f"• Selected Language Target: {language}\n"
