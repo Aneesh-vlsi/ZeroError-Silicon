@@ -6,9 +6,9 @@
 # correctness signal instead of just trusting the model's output.
 #
 # Requires arduino-cli + the relevant board cores to be installed in the
-# deployment image (see the Dockerfile). Everything used here — arduino-cli
-# itself, and every board core in board_registry.py — is free and
-# open-source; there is no paid dependency.
+# deployment image (see the Dockerfile snippet provided alongside this file).
+# Everything used here — arduino-cli itself, and every board core in
+# board_registry.py — is free and open-source; there is no paid dependency.
 
 import subprocess
 import tempfile
@@ -22,9 +22,9 @@ def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, s
     """Compiles `sketch_code` for the given FQBN using arduino-cli.
 
     Returns (success, binary_path_or_empty, log_output).
-    Never raises — any failure (timeout, missing binary, missing arduino-cli
-    binary, compile error) is caught and returned as a readable log message
-    instead of crashing the Gradio callback.
+    Never raises — any failure (timeout, missing binary, compile error) is
+    caught and returned as a readable log message instead of crashing the
+    Gradio callback (which would otherwise show a bare, unhelpful "Error").
     """
     workdir = tempfile.mkdtemp(prefix="zes_sketch_")
     sketch_dir = os.path.join(workdir, "sketch")
@@ -35,7 +35,6 @@ def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, s
         f.write(sketch_code)
 
     log_lines = []
-    compile_result = None
 
     try:
         # Only install the core if it's not already present (cores are
@@ -55,9 +54,8 @@ def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, s
         # Free-tier cloud CPUs are slow — give the compiler generous room
         # (5 minutes) rather than risk an uncaught timeout mid-compile.
         # --build-cache-path reuses compiled core object files across
-        # requests (and across the Docker build's cache-warming step), so
-        # only the FIRST-EVER compile of a given board is genuinely slow.
-        os.makedirs("/opt/arduino-cache", exist_ok=True)
+        # requests (and across the Docker build's cache-warming step below),
+        # so only the FIRST-EVER compile of a given board is genuinely slow.
         compile_result = subprocess.run(
             [ARDUINO_CLI_BIN, "compile", "--fqbn", fqbn, sketch_dir,
              "--export-binaries", "--build-cache-path", "/opt/arduino-cache"],
@@ -75,7 +73,7 @@ def compile_sketch(sketch_code: str, fqbn: str, core: str) -> tuple[bool, str, s
         shutil.rmtree(workdir, ignore_errors=True)
         return False, "", "\n".join(log_lines) + f"\n[Unexpected error during compile: {type(e).__name__}: {str(e)}]"
 
-    if compile_result is None or compile_result.returncode != 0:
+    if compile_result.returncode != 0:
         shutil.rmtree(workdir, ignore_errors=True)
         return False, "", "\n".join(log_lines)
 
