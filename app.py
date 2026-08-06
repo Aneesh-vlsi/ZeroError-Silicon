@@ -1,3 +1,4 @@
+# app.py
 import gradio as gr
 from app_logic import handle_hardware_pipeline, handle_software_pipeline
 from theme_engine import theme_engine_js, force_light_mode_js, stop_sfx_js, login_wall_css
@@ -57,8 +58,9 @@ logout_session_js = r"""
 # WEBSERIAL: live board connect/disconnect status indicator
 # ============================================================
 # Runs once on page load. Requires Chrome/Edge on desktop — WebSerial is not
-# available on mobile browsers or Safari/Firefox. We detect that gracefully
-# and label the status box accordingly instead of failing silently.
+# available on mobile browsers or Safari/Firefox (see chat notes). We detect
+# that gracefully and label the status box accordingly instead of failing
+# silently.
 board_status_watcher_js = """
 () => {
     const statusEl = () => document.getElementById("zes-board-status-badge");
@@ -212,9 +214,9 @@ with gr.Blocks() as app:
                     board_input = gr.Textbox(label="1️⃣ Enter Target Microcontroller Board Name", placeholder="e.g., STM32 H743ZI2, ESP32, Arduino Uno", value="")
                 with gr.Column(scale=2):
                     components_input = gr.Textbox(label="2️⃣ Enter Required Sensors, Pins, and Displays Profile", placeholder="e.g., sense distance via ultrasonic sensor and show on oled screen", value="", lines=2)
-
+            
             compile_hw_btn = gr.Button("⚡ Run Multi-Pass Code Compilation & Wire Mapping Pass", variant="primary")
-
+            
             with gr.Row():
                 with gr.Column(scale=3):
                     hw_code_output = gr.Code(label="3️⃣ Verified Source Script Code Output", language="cpp", value="")
@@ -226,7 +228,7 @@ with gr.Blocks() as app:
                     hw_flash_payload = gr.Textbox(value="{}", visible=False)
                     hw_flash_btn = gr.Button("⚡ Flash to Board", variant="primary", visible=False)
                     hw_download_btn = gr.Button("📥 Download Verified Script & Wire Map File Locally", variant="secondary")
-
+                    
                     with gr.Row():
                         hw_play_btn = gr.Button("🔊 Silicon talks", variant="secondary")
                         hw_stop_btn = gr.Button("🛑 Stop Silicon talks", variant="stop")
@@ -238,17 +240,17 @@ with gr.Blocks() as app:
         # TAB 2: GENERAL APPLICATION CODE DEVELOPMENT (HTML/CSS LAYOUTS ONLY)
         with gr.Tab("💻 General Desktop Code (HTML/CSS)"):
             gr.Markdown("### 💡 Isolated Frontend Engine Workspace\n*This module is strictly dedicated to creating responsive front-end user interface designs using pure interactive HTML, CSS layouts, and client-side JavaScript canvas scripts.*")
-
+            
             with gr.Row():
                 sw_prompt_input = gr.Textbox(label="1️⃣ Enter Frontend User Interface Sizing, Theme & Animation Logic Rules", placeholder="e.g., create an interactive analog gauge odometer configuration with sleek animations...", value="", lines=2)
-
+            
             compile_sw_btn = gr.Button("⚙️ Compile Frontend Design Blueprint", variant="primary")
-
+            
             with gr.Row():
                 with gr.Column(scale=3):
                     sw_code_output = gr.HTML(label="2️⃣ Live Functional Application Workspace Preview")
                     gr.Markdown("---")
-
+                    
                     gr.HTML(value="""
                         <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 16px; margin: 10px 0 20px 0; display: flex; align-items: flex-start; gap: 8px;">
                             <span style="color: #2563eb; font-size: 18px; font-weight: bold; line-height: 1.2;">ℹ️</span>
@@ -258,9 +260,9 @@ with gr.Blocks() as app:
                             </p>
                         </div>
                     """)
-
+                    
                     sw_download_btn = gr.Button("📥 Download Software Code Locally", variant="secondary")
-
+                    
                     with gr.Row():
                         sw_play_btn = gr.Button("🔊 Silicon talks", variant="secondary")
                         sw_stop_btn = gr.Button("🛑 Stop Silicon talks", variant="stop")
@@ -272,9 +274,9 @@ with gr.Blocks() as app:
     # ==========================================
     # EVENT LOGIC TRACK WRAPPERS AND ROUTING
     # ==========================================
-
+    
     logout_btn.click(fn=None, inputs=None, js=logout_session_js)
-
+    
     theme_selector.change(fn=None, inputs=[theme_selector], js=theme_engine_js)
     app.load(fn=None, inputs=[theme_selector], js=theme_engine_js)
     app.load(fn=None, inputs=None, js=board_status_watcher_js)
