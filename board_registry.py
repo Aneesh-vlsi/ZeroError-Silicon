@@ -58,6 +58,26 @@ FLASH_METHOD = {
     "STMicroelectronics:stm32": "webusb-dfu",       # requires BOOT0 into DFU mode
     "adafruit:nrf52":       "webserial-uf2",
 }
+
+# ============================================================
+# FLASH OFFSET FIX
+# ============================================================
+# esptool-based families (ESP32, ESP8266) do NOT share a flash memory
+# layout, so the address you write the compiled binary to is NOT the same
+# constant for both chips. Using the wrong offset silently writes the
+# correct binary bytes to the wrong place in flash — the board still
+# "flashes successfully" with no error, but boots garbage/stale data,
+# which looks exactly like a code bug even though the sketch itself is fine.
+#
+#   - ESP8266 (Arduino core, eboot-based): the exported .bin from
+#     `arduino-cli --export-binaries` is a single combined image meant to
+#     be written starting at address 0x0.
+#   - ESP32 (Arduino core, no eboot): the app binary goes at 0x10000, with
+#     a separate bootloader normally at 0x1000 and partition table at
+#     0x8000. (Only the single "first .bin found" is currently flashed —
+#     see compiler.py note — so for now this assumes an app-only image at
+#     0x10000 works for your target boards; multi-binary ESP32 flashing is
+#     a follow-up item, not fixed here.)
 FLASH_OFFSET = {
     "esp32:esp32":     "0x10000",
     "esp8266:esp8266": "0x0",
@@ -75,12 +95,22 @@ def resolve_board(user_text: str):
     # Exact key match first
     if clean in BOARD_REGISTRY:
         entry = BOARD_REGISTRY[clean]
-        return {**entry, "flash_method": FLASH_METHOD.get(entry["core"], "download-only"), "matched_key": clean}
+        return {
+            **entry,
+            "flash_method": FLASH_METHOD.get(entry["core"], "download-only"),
+            "flash_offset": FLASH_OFFSET.get(entry["core"], "0x1000"),
+            "matched_key": clean,
+        }
 
     # Substring match (longest key first, so "stm32h743" wins over "stm32h7")
     for key in sorted(BOARD_REGISTRY.keys(), key=len, reverse=True):
         if key in clean:
             entry = BOARD_REGISTRY[key]
-            return {**entry, "flash_method": FLASH_METHOD.get(entry["core"], "download-only"), "matched_key": key}
+            return {
+                **entry,
+                "flash_method": FLASH_METHOD.get(entry["core"], "download-only"),
+                "flash_offset": FLASH_OFFSET.get(entry["core"], "0x1000"),
+                "matched_key": key,
+            }
 
     return None
