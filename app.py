@@ -109,6 +109,13 @@ board_status_watcher_js = """
 # FLASH TO BOARD: real WebSerial flashing for ESP32 family.
 # AVR / RP2040 / nRF52 / STM32(DFU) show an honest "not yet automated,
 # download the binary and flash manually" message rather than faking it.
+#
+# FIX: flash write address is no longer a hardcoded 0x1000 for every
+# esptool-based board. ESP32 and ESP8266 have different flash layouts —
+# writing to the wrong offset silently "succeeds" (no error from esptool)
+# but boots garbage, which looks exactly like a firmware bug even though
+# the compiled binary itself is correct. The backend now sends the correct
+# per-chip offset in `payload.flash_offset` (see board_registry.py).
 # ============================================================
 flash_to_board_js = """
 async (flash_payload_json) => {
@@ -135,13 +142,19 @@ async (flash_payload_json) => {
             const loaderOptions = { transport, baudrate: 115200 };
             const esploader = new esptoolModule.ESPLoader(loaderOptions);
             await esploader.main();
+
+            // Use the chip-specific offset sent from the backend instead of a
+            // hardcoded constant. Falls back to 0x1000 only if the backend
+            // didn't provide one (shouldn't happen for esp32/esp8266).
+            const flashAddress = parseInt(payload.flash_offset || "0x1000", 16);
+
             await esploader.writeFlash({
-                fileArray: [{ data: Array.from(bytes).map(b => String.fromCharCode(b)).join(""), address: 0x1000 }],
+                fileArray: [{ data: Array.from(bytes).map(b => String.fromCharCode(b)).join(""), address: flashAddress }],
                 flashSize: "keep",
                 eraseAll: false,
                 compress: true,
             });
-            alert("✅ Flash complete! Your ESP32 has been programmed.");
+            alert("✅ Flash complete! Your board has been programmed at address 0x" + flashAddress.toString(16) + ".");
         } catch (err) {
             alert("Flashing failed: " + err.message + "\\n\\nMake sure your board is in the correct mode and try again.");
         }
