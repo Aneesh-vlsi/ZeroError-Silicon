@@ -58,6 +58,10 @@ FLASH_METHOD = {
     "STMicroelectronics:stm32": "webusb-dfu",       # requires BOOT0 into DFU mode
     "adafruit:nrf52":       "webserial-uf2",
 }
+FLASH_OFFSET = {
+    "esp32:esp32":     "0x10000",
+    "esp8266:esp8266": "0x0",
+}
 
 
 def resolve_board(user_text: str):
