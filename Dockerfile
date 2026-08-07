@@ -31,9 +31,14 @@ RUN curl -fsSL -o /tmp/arduino-cli.tar.gz \
     && arduino-cli version
 
 # --- Register free, open-source board package index sources ---
+# NOTE: the ESP8266 index (arduino.esp8266.com) must be listed here too —
+# without it, `arduino-cli core install esp8266:esp8266` fails with
+# "Invalid argument passed: Platform 'esp8266:esp8266' not found" even
+# though arduino:avr and esp32:esp32 install fine.
 RUN arduino-cli config init && \
     arduino-cli config add board_manager.additional_urls \
         https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json \
+        https://arduino.esp8266.com/stable/package_esp8266com_index.json \
         https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json \
         https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json \
         https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
