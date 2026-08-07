@@ -14,8 +14,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Install arduino-cli (official install script, free) ---
-RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh -s -- -b /usr/local/bin
+# --- Install arduino-cli (free, open-source) ---
+# NOTE: We download a pinned release tarball directly instead of piping
+# the official install.sh script. install.sh calls the GitHub API to look
+# up the "latest" release tag, and that lookup can intermittently 404 on
+# CI/build infrastructure (rate limiting or transient GitHub API issues) —
+# which breaks the whole image build. Downloading a fixed version by URL
+# avoids the GitHub API entirely and makes the build reproducible.
+# Bump ARDUINO_CLI_VERSION here whenever you want to pick up a newer release:
+# https://github.com/arduino/arduino-cli/releases
+ARG ARDUINO_CLI_VERSION=1.5.1
+RUN curl -fsSL -o /tmp/arduino-cli.tar.gz \
+        "https://github.com/arduino/arduino-cli/releases/download/v${ARDUINO_CLI_VERSION}/arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz" \
+    && tar -xzf /tmp/arduino-cli.tar.gz -C /usr/local/bin arduino-cli \
+    && rm /tmp/arduino-cli.tar.gz \
+    && arduino-cli version
 
 # --- Register free, open-source board package index sources ---
 RUN arduino-cli config init && \
