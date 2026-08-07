@@ -35,23 +35,50 @@ API_KEY_POOL = [
 API_KEY_POOL = [key for key in API_KEY_POOL if key.strip()]
 
 
+# Ordered by preference: gemini-3.6-flash first (GA as of the July 2026
+# release, lower latency/cost than 3.5), then gemini-2.5-flash and
+# gemini-3.5-flash-lite as fallbacks. gemini-3.5-flash was removed from the
+# "global" API endpoint on Aug 4, 2026 and has also had reported multi-hour
+# hangs on generateContent — since this app's client doesn't pin a region,
+# it's no longer safe to rely on as the ONLY model tried. Trying several
+# models per key (not just rotating keys) means one degraded model doesn't
+# stall every single request.
+CANDIDATE_MODELS = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-3.5-flash-lite']
+
+
 def _call_with_hard_timeout(api_key: str, contents, system_instruction: str, timeout_seconds: int):
     """Runs a single Gemini call in a worker thread and forcibly gives up
     after `timeout_seconds`, regardless of what the SDK itself does. Raises
     TimeoutError if it doesn't finish in time; the worker thread itself may
     keep running in the background until the process exits, but the caller
-    is freed immediately to move on to the next key."""
-    def _do_call():
-        client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_seconds * 1000))
-        return client.models.generate_content(
-            model='gemini-3.5-flash',
-            contents=contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction)
-        ).text
+    is freed immediately to move on to the next key.
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(_do_call)
-        return future.result(timeout=timeout_seconds)  # raises concurrent.futures.TimeoutError if too slow
+    Tries each model in CANDIDATE_MODELS in order for this key, moving to
+    the next model immediately on timeout/error rather than giving up on
+    the whole key after one model fails."""
+    last_error = None
+    for model_name in CANDIDATE_MODELS:
+        def _do_call(_model=model_name):
+            client = genai.Client(api_key=api_key, http_options=types.HttpOptions(timeout=timeout_seconds * 1000))
+            return client.models.generate_content(
+                model=_model,
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=system_instruction)
+            ).text
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(_do_call)
+                return future.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError as e:
+            last_error = e
+            continue  # this model stalled on this key — try the next model
+        except Exception as e:
+            last_error = e
+            continue
+
+    # Every candidate model failed/timed out for this key
+    raise last_error if last_error else RuntimeError("All candidate models failed with no error captured")
 
 
 def safe_api_call(contents, system_instruction, manual_override_key=""):
