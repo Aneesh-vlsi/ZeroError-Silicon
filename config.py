@@ -1,4 +1,3 @@
-# config.py
 import os
 import random
 import re
@@ -98,13 +97,15 @@ def infer_hardware_and_generate_code(board: str, components: str, runtime_key: s
           "binary_ext": str,       # "bin" / "hex" / "uf2"
           "flash_method": str,     # "webserial-esptool" / "webserial-stk500" /
                                     # "webserial-uf2" / "webusb-dfu" / "download-only"
+          "flash_offset": str,     # hex string, e.g. "0x0" / "0x10000" — chip-specific
+                                    # write address for esptool-based flashing
           "fqbn": str,
         }
     """
     clean_board = board.strip().lower()
 
     restricted_software_terms = ["server", "client", "website", "webpage", "database", "api", "cloud", "application", "app", "ui", "ux", "odometer", "html", "css", "javascript", "my computer", "pc", "laptop"]
-    empty_compile_info = {"compiled": False, "binary_b64": "", "binary_ext": "", "flash_method": "download-only", "fqbn": ""}
+    empty_compile_info = {"compiled": False, "binary_b64": "", "binary_ext": "", "flash_method": "download-only", "flash_offset": "", "fqbn": ""}
 
     if any(term == clean_board for term in restricted_software_terms) or len(clean_board) < 3:
         error_msg = (
@@ -187,6 +188,7 @@ def infer_hardware_and_generate_code(board: str, components: str, runtime_key: s
             "binary_b64": binary_b64,
             "binary_ext": binary_ext,
             "flash_method": board_match["flash_method"],
+            "flash_offset": board_match.get("flash_offset", "0x1000"),
             "fqbn": board_match["fqbn"],
         }
     else:
