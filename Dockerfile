@@ -1,10 +1,18 @@
-# Add this to your existing Dockerfile (or create one if you're currently
-# using Render's native Python buildpack — you'll need to switch to a
-# Dockerfile-based Render service to run arduino-cli).
-#
-# Every tool and board core installed below is free and open-source.
-# This only needs to happen once per deploy (baked into the image), not
-# per-request, so it doesn't slow down or cost anything at runtime.
+# ============================================================
+# ZeroError Silicon — Dockerfile
+# Python/Gradio app + arduino-cli (free, open-source) for real
+# server-side firmware compilation.
+# ============================================================
+
+FROM python:3.11-slim
+
+# --- System packages needed to install arduino-cli and build cores ---
+# curl: to fetch the arduino-cli install script
+# ca-certificates: so the HTTPS download above actually verifies correctly
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # --- Install arduino-cli (official install script, free) ---
 RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh -s -- -b /usr/local/bin
@@ -29,3 +37,29 @@ RUN arduino-cli core update-index && \
     arduino-cli core install STMicroelectronics:stm32 && \
     arduino-cli core install rp2040:rp2040 && \
     arduino-cli core install adafruit:nrf52
+
+# --- Pre-warm the arduino-cli build cache so the first real compile of ---
+# --- each board family isn't the slow one (matches compiler.py's use  ---
+# --- of --build-cache-path /opt/arduino-cache).                       ---
+RUN mkdir -p /opt/arduino-cache
+
+# --- App working directory ---
+WORKDIR /app
+
+# --- Install Python dependencies first (better Docker layer caching: ---
+# --- this layer only rebuilds when requirements.txt itself changes)  ---
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# --- Copy the rest of the application source ---
+COPY . .
+
+# --- Gradio listens on 7860 inside the container (matches app.launch ---
+# --- server_port=7860 in app.py) ---
+EXPOSE 7860
+
+# --- Environment: keep Python output unbuffered so logs show up live ---
+# --- in Render's log stream instead of being buffered ---
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "app.py"]
